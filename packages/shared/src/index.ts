@@ -79,6 +79,8 @@ export interface EmailDetail extends EmailSummary {
   message_id: string | null;
   body_text: string;
   html_r2_key?: string | null;
+  /** Remote images the sanitizer neutralised; inline (cid:) ones excluded. */
+  blocked_images?: number;
   attachments: Attachment[];
 }
 

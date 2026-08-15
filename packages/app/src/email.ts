@@ -78,6 +78,8 @@ interface StoredAttachment {
   contentType: string;
   size: number;
   r2Key: string;
+  /** Content-ID without the angle brackets, for resolving src="cid:…". */
+  contentId: string;
 }
 
 interface AliasRow {
@@ -199,9 +201,14 @@ export async function emailHandler(message: EmailMessageLike, env: Env): Promise
 
     // 5. Sanitize + store HTML (R2), keep body_text in D1.
     let htmlKeyActual: string | null = null;
+    let blockedImages = 0;
     if (bodyHtml) {
       const sanitized = sanitizeHtml(bodyHtml);
       if (sanitized) {
+        // Every neutralised <img> becomes data-blocked-src. Inline ones
+        // (cid:) are resolved when the HTML is served, so only the remote
+        // ones count towards the "show images" prompt.
+        blockedImages = (sanitized.match(/data-blocked-src="(?!cid:)/gi) || []).length;
         await env.HTML_BUCKET.put(htmlKey, sanitized);
         htmlKeyActual = htmlKey;
       }
@@ -217,12 +224,15 @@ export async function emailHandler(message: EmailMessageLike, env: Env): Promise
       const size = typeof content === 'string'
         ? new TextEncoder().encode(content).byteLength
         : (content?.byteLength || 0);
+      // postal-mime reports it as `<abc@host>`; store the bare id.
+      const rawCid = (a as { contentId?: string }).contentId || '';
       return {
         id: ulid(),
         filename: a.filename || 'attachment',
         contentType: a.mimeType || 'application/octet-stream',
         size,
         r2Key: '',
+        contentId: rawCid.replace(/^<|>$/g, '').trim().toLowerCase(),
       };
     });
 
@@ -243,22 +253,24 @@ export async function emailHandler(message: EmailMessageLike, env: Env): Promise
     await env.DB.prepare(
       `INSERT INTO emails
         (id, alias_id, message_id, from_address, from_name, to_address, subject,
-         body_text, snippet, raw_r2_key, html_r2_key, has_attachments, size_bytes, received_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`
+         body_text, snippet, raw_r2_key, html_r2_key, has_attachments, size_bytes, received_at,
+         blocked_images)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`
     )
       .bind(
         id, alias.id,
         parsed.messageId || null,
         fromAddress, fromName, toAddr, subject,
         bodyText, snippet, rawKey, htmlKeyActual,
-        hasAttachments, sizeBytes, receivedAt
+        hasAttachments, sizeBytes, receivedAt,
+        blockedImages
       )
       .run();
 
     for (const a of atts) {
       await env.DB.prepare(
-        'INSERT INTO attachments (id, email_id, filename, content_type, size_bytes, r2_key) VALUES (?1, ?2, ?3, ?4, ?5, ?6)'
-      ).bind(a.id, id, a.filename, a.contentType, a.size, a.r2Key).run();
+        'INSERT INTO attachments (id, email_id, filename, content_type, size_bytes, r2_key, content_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)'
+      ).bind(a.id, id, a.filename, a.contentType, a.size, a.r2Key, a.contentId).run();
     }
   } catch (err) {
     console.error('email handler error', err);

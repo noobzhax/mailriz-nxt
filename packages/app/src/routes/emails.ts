@@ -187,11 +187,11 @@ emailRoutes.get('/:id', async (c) => {
   const id = c.req.param('id');
 
   const row = await e.DB.prepare(
-    `SELECT ${SUMMARY_COLS}, e.to_address, e.message_id, e.body_text, e.raw_r2_key, e.html_r2_key
+    `SELECT ${SUMMARY_COLS}, e.to_address, e.message_id, e.body_text, e.raw_r2_key, e.html_r2_key, e.blocked_images
      FROM emails e WHERE e.id = ?1`
   )
     .bind(id)
-    .first<SummaryRow & { to_address: string; message_id: string | null; body_text: string; raw_r2_key: string; html_r2_key: string | null }>();
+    .first<SummaryRow & { to_address: string; message_id: string | null; body_text: string; raw_r2_key: string; html_r2_key: string | null; blocked_images: number }>();
 
   if (!row) return c.json({ error: 'Not found' }, 404);
 
@@ -227,6 +227,7 @@ emailRoutes.get('/:id', async (c) => {
     size_bytes: row.size_bytes,
     received_at: row.received_at,
     html_r2_key: row.html_r2_key,
+    blocked_images: row.blocked_images ?? 0,
     attachments: atts.results,
     labels: labels.results,
   };
@@ -359,14 +360,61 @@ emailRoutes.get('/:id/raw', async (c) => {
 
 // ---- GET /:id/html (stream sanitized HTML) --------------------------------
 
+/** Reverse the entity escaping the sanitizer applied to attribute values. */
+function unescapeHtml(s: string): string {
+  return s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+/**
+ * Serve the sanitized body.
+ *
+ * The sanitizer strips every <img src> into data-blocked-src, so the stored
+ * HTML renders no pictures at all. Two kinds are then restored here:
+ *
+ *  - cid: references point at the message's own attachments and carry no
+ *    privacy cost, so they are always resolved to the attachment URL.
+ *    Without this an inline image is permanently broken, even though the
+ *    same file opens fine from the attachment list.
+ *  - remote URLs stay blocked unless ?images=1, which is what the reading
+ *    pane's "show images" button requests.
+ */
 emailRoutes.get('/:id/html', async (c) => {
   const e = c.env;
   const id = c.req.param('id');
+  const showRemote = c.req.query('images') === '1';
+
   const row = await e.DB.prepare('SELECT html_r2_key FROM emails WHERE id = ?1').bind(id).first<{ html_r2_key: string | null }>();
   if (!row || !row.html_r2_key) return c.json({ error: 'Not found' }, 404);
   const obj = await e.HTML_BUCKET.get(row.html_r2_key);
   if (!obj) return c.json({ error: 'Not found' }, 404);
-  return new Response(obj.body, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+
+  const atts = await e.DB.prepare(
+    'SELECT id, content_id FROM attachments WHERE email_id = ?1 AND content_id <> \'\''
+  ).bind(id).all<{ id: string; content_id: string }>();
+
+  const byCid = new Map<string, string>();
+  for (const a of atts.results || []) byCid.set(a.content_id.toLowerCase(), a.id);
+
+  let html = await obj.text();
+  html = html.replace(/data-blocked-src="([^"]*)"/gi, (whole, encoded: string) => {
+    const value = unescapeHtml(encoded);
+    if (/^cid:/i.test(value)) {
+      const attId = byCid.get(value.slice(4).trim().toLowerCase());
+      // Unresolvable cid stays blocked rather than becoming a broken request.
+      return attId ? `src="/api/attachments/${attId}?inline=1"` : whole;
+    }
+    return showRemote ? `src="${encoded}"` : whole;
+  });
+
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+    },
   });
 });
