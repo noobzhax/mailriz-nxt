@@ -147,6 +147,28 @@ describe('body fidelity', () => {
     expect(await (await get(makeEnv(html))).text()).toBe(html);
   });
 
+  it('rewrites http(s) links to open in a new tab', async () => {
+    const html = '<a href="https://example.com/x">click</a>';
+    const out = await (await get(makeEnv(html))).text();
+    expect(out).toContain('target="_blank"');
+    expect(out).toContain('rel="noopener noreferrer"');
+    expect(out).toContain('href="https://example.com/x"');
+  });
+
+  it('does not rewrite non-http links', async () => {
+    const html = '<a href="#section">jump</a><a href="mailto:a@b.c">mail</a>';
+    const out = await (await get(makeEnv(html))).text();
+    expect(out).toBe(html);
+  });
+
+  it('does not double-rewrite links that already have target or rel', async () => {
+    const html = '<a href="https://example.com/x" target="_self">x</a>';
+    const out = await (await get(makeEnv(html))).text();
+    expect(out).toContain('target="_self"');
+    expect(out).toContain('rel="noopener noreferrer"');
+    expect((out.match(/target=/g) || []).length).toBe(1);
+  });
+
   it('leaves remote image sources untouched even when revealed', async () => {
     const html = '<img src="https://cdn.example/logo.png">';
     // Revealing is a header change, not an edit to the markup.
