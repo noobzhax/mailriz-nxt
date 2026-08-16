@@ -47,12 +47,18 @@ export function resetJwksCache(): void {
   jwksCache = null;
 }
 
+/** The certs endpoint itself — already the full path, nothing to append. */
+function certsUrl(env: Env): string {
+  return (
+    env.ACCESS_CERTS_URL || `https://${env.ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`
+  ).replace(/\/+$/, '');
+}
+
 function getJwks(env: Env) {
-  const base = (env.ACCESS_CERTS_URL || `https://${env.ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`).replace(/\/+$/, '');
   // The JWKS URL is fixed for a deployment, so build the set once and reuse
   // it — jose fetches keys lazily and caches them by kid.
   if (!jwksCache) {
-    jwksCache = createRemoteJWKSet(new URL(`${base}/certs`));
+    jwksCache = createRemoteJWKSet(new URL(certsUrl(env)));
   }
   return jwksCache;
 }
@@ -60,6 +66,9 @@ function getJwks(env: Env) {
 async function validateAccessJwt(token: string, env: Env): Promise<string | null> {
   const aud = env.ACCESS_AUD;
   const teamDomain = env.ACCESS_TEAM_DOMAIN;
+  // Both are required: without the team domain there is no key set to verify
+  // against, and an install that reaches here with it empty would reject every
+  // request. `mailriz-cli status` reports this so it is diagnosable.
   if (!aud || !teamDomain) return null;
 
   try {
@@ -68,6 +77,9 @@ async function validateAccessJwt(token: string, env: Env): Promise<string | null
       // Access tokens are issued for the team domain; pin the issuer so a
       // token minted by some other Access team can't pass.
       issuer: `https://${teamDomain}`,
+      // Access signs with RS256. Pinning it means a key set that ever offered
+      // something weaker could not be talked into using it.
+      algorithms: ['RS256'],
     });
 
     const email = payload.email;

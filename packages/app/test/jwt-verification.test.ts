@@ -17,6 +17,8 @@ import { resetJwksCache } from '../src/middleware/auth';
 let keyPair: Awaited<ReturnType<typeof generateKeyPair>> | null = null;
 let certsUrl = '';
 let jwksBody = '';
+/** Every URL the Worker asked for, so the JWKS path itself can be asserted. */
+let requestedUrls: string[] = [];
 
 const TEAM = 'acme.cloudflareaccess.com';
 const AUD = '7e9a1f2b3c4d5e6f7a8b9c0d';
@@ -33,9 +35,15 @@ async function setupJwks() {
 
   // jose's createRemoteJWKSet fetches the certs endpoint; serve the JWKS from
   // the mock so no real network is involved.
+  //
+  // Matched by exact equality, deliberately. A startsWith() match here also
+  // answers `.../certs/certs`, which is how a doubled path once passed the
+  // whole suite while failing against real Cloudflare.
+  requestedUrls = [];
   globalThis.fetch = (async (input: any, init?: any) => {
     const url = typeof input === 'string' ? input : input.url;
-    if (url.startsWith(certsUrl)) {
+    requestedUrls.push(url);
+    if (url === certsUrl) {
       return new Response(jwksBody, {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -46,13 +54,10 @@ async function setupJwks() {
 }
 
 /** Sign a token with the test private key. */
-function sign(
-  claims: Record<string, unknown>,
-  { alg = 'RS256', key = 'private' } = {}
-): Promise<string> {
-  const k = key === 'private' ? keyPair!.privateKey : keyPair!.publicKey;
+function sign(claims: Record<string, unknown>): Promise<string> {
+  const k = keyPair!.privateKey;
   return new SignJWT({ ...claims })
-    .setProtectedHeader({ alg, kid: 'test-key-1' })
+    .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
     .setIssuedAt()
     .setIssuer(ISSUER)
     .setAudience(AUD)
@@ -97,10 +102,35 @@ describe('Access JWT signature verification', () => {
     expect(body.mode).toBe('access');
   });
 
-  it('rejects a token signed by a different key', async () => {
+  it('fetches the JWKS from the real certs path, not a nested one', async () => {
     await setupJwks();
-    // Sign with a second, unrelated key pair — the old code would have
-    // accepted this because the claims (aud/exp/email) were fine.
+    const token = await sign({ email: 'owner@example.com' });
+    await get('/api/me', token);
+    // A doubled `/certs` 404s against Cloudflare and would reject every
+    // request in production, while a loose mock would still let it pass here.
+    expect(requestedUrls).toContain(certsUrl);
+    expect(requestedUrls.some((u) => u.includes('/certs/certs'))).toBe(false);
+  });
+
+  it('rejects a forged token that reuses the genuine key id', async () => {
+    await setupJwks();
+    // Same `kid` as the real key, signed by someone else's. jose therefore
+    // finds the genuine key and the signature comparison itself must fail —
+    // a different kid would only prove key lookup fails, which is weaker.
+    const other = await generateKeyPair('RS256');
+    const token = await new SignJWT({ email: 'owner@example.com' })
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
+      .setIssuedAt()
+      .setIssuer(ISSUER)
+      .setAudience(AUD)
+      .setExpirationTime('1h')
+      .sign(other.privateKey);
+    const res = await get('/api/me', token);
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects a token signed by an unknown key id', async () => {
+    await setupJwks();
     const other = await generateKeyPair('RS256');
     const token = await new SignJWT({ email: 'owner@example.com' })
       .setProtectedHeader({ alg: 'RS256', kid: 'other-key' })

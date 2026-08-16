@@ -70,4 +70,12 @@ on the edge challenge.
 
 Signature verification is done with [`jose`](https://github.com/panva/jose),
 Cloudflare's recommended library. The JWKS is fetched lazily and cached by key
-ID, so a key rotation is picked up automatically on the next verification.
+ID. When a token arrives signed by a key the cache does not hold, the key set
+is refetched — subject to a short cooldown, so a rotation is picked up on its
+own without a redeploy.
+
+The algorithm is pinned to RS256, which is what Access signs with.
+
+If `ACCESS_TEAM_DOMAIN` is empty there is no key set to verify against, and
+every request is rejected. `mailriz-cli status` calls that out explicitly,
+since a dashboard that 401s on everything otherwise gives no clue why.
