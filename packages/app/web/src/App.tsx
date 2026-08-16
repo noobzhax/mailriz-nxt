@@ -1056,13 +1056,15 @@ function ReadingPane({ emailId, onBack }: { emailId: string; onBack: () => void 
                 </button>
               </div>
             )}
-            {/* An empty sandbox is the point: no allow-same-origin, so the
-                message can never reach the dashboard's origin. */}
+            {/* Sandbox without allow-same-origin: the message can never reach
+                the dashboard's origin. allow-popups lets the rewritten
+                target="_blank" links open in a new tab — a sandboxed document
+                cannot navigate its own frame. */}
             <iframe
               key={iframeKey}
               src={`/api/emails/${emailId}/html${showImages ? '?images=1' : ''}`}
               className="email-frame"
-              sandbox=""
+              sandbox="allow-popups allow-popups-to-escape-sandbox"
               title="Email body"
             />
           </>

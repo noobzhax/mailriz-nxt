@@ -420,6 +420,22 @@ emailRoutes.get('/:id/html', async (c) => {
   // them back so those messages still show pictures when asked.
   if (showRemote) html = html.replace(/data-blocked-src=/gi, 'src=');
 
+  // Links: a sandboxed document cannot navigate its own frame, so every
+  // http(s) anchor is rewritten to open in a new tab instead of appearing
+  // dead. The new tab is a normal (unsandboxed) page, so noopener protects
+  // the dashboard's window handle and noreferrer stops the referrer leaking.
+  // javascript: links are not touched by this — they are inert under the
+  // CSP's script-src anyway, and the sanitizer already strips them.
+  html = html.replace(/<a\b([^>]*)>/gi, (whole: string, attrs: string) => {
+    // Only touch anchors that carry an http(s) href.
+    const hrefMatch = attrs.match(/\bhref\s*=\s*("https?:[^"]*"|'https?:[^']*'|https?:[^\s>]*)/i);
+    if (!hrefMatch) return whole;
+    const hasTarget = /\btarget\s*=/.test(attrs);
+    const hasRel = /\brel\s*=/.test(attrs);
+    const additions = `${hasTarget ? '' : ' target="_blank"'}${hasRel ? '' : ' rel="noopener noreferrer"'}`;
+    return `<a${attrs}${additions}>`;
+  });
+
   const cidRefs = /src\s*=\s*(?:"cid:([^"]+)"|'cid:([^']+)'|cid:([^\s>]+))/gi;
   if (cidRefs.test(html)) {
     cidRefs.lastIndex = 0;
