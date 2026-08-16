@@ -208,7 +208,24 @@ async function deployWithWrangler(opts: {
   const require = createRequire(import.meta.url);
   const wranglerPkgPath = require.resolve('wrangler/package.json');
   const wranglerBin = join(dirname(wranglerPkgPath), 'bin', 'wrangler.js');
-  await execFileP(process.execPath, [wranglerBin, 'deploy'], { cwd: opts.releaseDir, env });
+
+  // spawn + wait for 'close', NOT execFile: execFile resolves when the child's
+  // stdio *streams* end, and wrangler can leave a lingering handle after a
+  // successful deploy, so the CLI would sit at "redeploying…" forever even
+  // though the deploy already landed on Cloudflare.
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(process.execPath, [wranglerBin, 'deploy'], {
+      cwd: opts.releaseDir,
+      env,
+      stdio: ['ignore', 'inherit', 'pipe'],
+    });
+    let stderr = '';
+    child.stderr?.on('data', (d) => { stderr += d; });
+    child.on('error', reject);
+    child.on('close', (code) =>
+      code === 0 ? resolve() : reject(new Error(stderr.trim() || `wrangler deploy exited ${code}`))
+    );
+  });
 }
 
 /**
