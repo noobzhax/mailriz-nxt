@@ -12,9 +12,11 @@ Telegram chat** — sender, subject, snippet, and a link back to the message.
 See [Telegram notifications](/mailriz-nxt/en/guides/telegram-notifications/).
 
 - The bot token is a Worker **secret** deployed by the CLI
-- Chat id, enable/disable, and the full-body option live in the dashboard
-  **Settings** page
+- Any number of **chat ids** (comma-separated) receive each notification;
+  toggles and chat ids live in the dashboard **Settings** page
 - Each alias can be **muted individually** with the bell in the sidebar
+- The bot answers **`/refresh`** — an open dashboard tab refetches instantly
+  (webhook registered from the Settings page)
 
 ## CLI package
 

@@ -15,9 +15,11 @@ Telegram** — pengirim, subjek, snippet, dan tautan kembali ke pesan. Lihat
 [Notifikasi Telegram](/mailriz-nxt/id/guides/telegram-notifications/).
 
 - Token bot adalah Worker **secret** yang di-deploy oleh CLI
-- Chat id, aktif/nonaktif, dan opsi body lengkap ada di halaman **Settings**
-  dashboard
+- Sejumlah **chat id** (dipisah koma) menerima setiap notifikasi;
+  aktif/nonaktif dan chat id ada di halaman **Settings** dashboard
 - Setiap alias bisa **di-mute satu per satu** dengan lonceng di sidebar
+- Bot menjawab **`/refresh`** — tab dashboard yang terbuka langsung memuat
+  ulang (webhook didaftarkan dari halaman Settings)
 
 ## Paket CLI
 
@@ -51,3 +53,4 @@ Segala hal lain dibagi dengan upstream: alias catch-all, folder, label, search,
 model penyimpanan email mentah (data Anda di R2 dan D1 Anda sendiri),
 autentikasi Cloudflare Access / session-password, perintah `update` dan
 `destroy`, serta batas platform.
+
