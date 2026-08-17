@@ -6,7 +6,7 @@
 
 **A persistent email alias service on your own domain — one inbox for every address, yours forever.**
 
-[**📖 Documentation**](https://noobzhax.github.io/mailriz-nxt/) · [Quick start][quickstart] · [How it works][internals]
+[**📖 Documentation**](https://noobzhax.github.io/mailriz-nxt/) · [Quick start][quickstart] · [How it works][internals] · [Changelog][changelog]
 
 <!-- A GIF, not <video>: GitHub will not render a player from a repo path, and
      an animated image is the only thing that plays inline here. The full-
@@ -117,4 +117,5 @@ MIT — use it, fork it, learn from it.
 [cli]: https://noobzhax.github.io/mailriz-nxt/en/reference/cli/
 [config]: https://noobzhax.github.io/mailriz-nxt/en/reference/configuration/
 [internals]: https://noobzhax.github.io/mailriz-nxt/en/internals/architecture/
+[changelog]: CHANGELOG.md
 
