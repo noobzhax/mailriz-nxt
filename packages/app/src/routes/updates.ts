@@ -75,10 +75,12 @@ async function refreshMarker(env: Env): Promise<number> {
 updatesRoutes.get('/stream', async (c) => {
   const env = c.env;
 
-  // On reconnect the browser replays the last id it saw. Using it as the
-  // baseline means mail that landed in the gap between connections still
-  // produces an event instead of being silently skipped.
-  const resumeFrom = c.req.header('Last-Event-ID');
+  // On reconnect the browser replays the last id it saw. The id encodes
+  // which axis it belongs to — `mail` ids are "<ts>_<emailId>", refresh ids
+  // are "refresh:<ts>" — and each axis resumes from its own baseline. Using
+  // one as the other's baseline makes the comparison always look new, which
+  // floods the client with spurious mail events on every reconnect.
+  const resumeFrom = c.req.header('Last-Event-ID') || '';
   const signal = c.req.raw.signal;
 
   const { poll, ping, connection } = timings(env);
@@ -107,11 +109,19 @@ updatesRoutes.get('/stream', async (c) => {
       let known: Cursor;
       let knownRefresh: number;
       try {
-        known = resumeFrom ?? (await newestCursor(env));
-        // The refresh marker is only ever forwarded while it advances *during*
-        // a connection. A refresh that happened while disconnected is covered
-        // by the mail cursor resume — new mail emits its own event anyway.
-        knownRefresh = await refreshMarker(env);
+        if (resumeFrom.startsWith('refresh:')) {
+          // A refresh id only resumes the refresh axis; the mail axis has to
+          // start from the current cursor (no mail id is recoverable from it).
+          knownRefresh = Number(resumeFrom.slice('refresh:'.length)) || 0;
+          known = await newestCursor(env);
+        } else {
+          known = resumeFrom || (await newestCursor(env));
+          // The refresh marker is only ever forwarded while it advances
+          // *during* a connection. A refresh that happened while disconnected
+          // is covered by the mail cursor resume — new mail emits its own
+          // event anyway.
+          knownRefresh = await refreshMarker(env);
+        }
       } catch {
         close();
         return;

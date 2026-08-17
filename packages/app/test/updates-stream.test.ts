@@ -174,6 +174,18 @@ describe('change detection', () => {
 
     expect(await readAll(res)).toContain('"latest":"100_b"');
   });
+
+  it('does not mistake a refresh resume id for a mail baseline', async () => {
+    // Resuming from "refresh:100" with no new mail must stay quiet — using
+    // the refresh id as the mail baseline would compare "refresh:100"
+    // against the cursor and emit a spurious mail event on every reconnect.
+    const env = makeEnv([{ id: 'a', received_at: 100 }]);
+    const res = await open(env, await cookieFor(env), 'refresh:100');
+
+    const text = await readAll(res);
+    expect(text).not.toContain('event: mail');
+    expect(text).not.toContain('event: refresh');
+  });
 });
 
 describe('resuming after a reconnect', () => {

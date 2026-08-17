@@ -107,11 +107,17 @@ function useEmails(view: EmailView, aliasId: string | null, labelId: string | nu
   /**
    * Reload from the first page. New mail sorts to the top, so paging state is
    * dropped — refetching alone would only refresh whichever page is loaded.
+   * When a later page is open, dropping the cursor changes the query key and
+   * triggers the page-1 fetch by itself; refetching the old key first would
+   * fetch the page we are about to discard.
    */
   const refreshFromTop = () => {
     setItems([]);
-    setCursor(null);
-    query.refetch();
+    if (cursor === null) {
+      query.refetch();
+    } else {
+      setCursor(null);
+    }
   };
 
   return {
