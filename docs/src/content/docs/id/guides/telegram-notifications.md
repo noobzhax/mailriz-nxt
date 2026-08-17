@@ -84,7 +84,7 @@ path-scoped agar server Telegram bisa menjangkaunya tanpa sesi.
 alias: newsletter@yourdomain.com
 Subject: Hello from Jane
 🕐 2026-08-17 10:20 UTC
-
+──────────────────
 This is the snippet text…
 
 [ Buka di Dashboard ]   ← tombol, membuka pesannya

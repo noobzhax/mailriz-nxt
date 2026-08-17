@@ -81,7 +81,7 @@ application so Telegram's servers can reach it without a session.
 alias: newsletter@yourdomain.com
 Subject: Hello from Jane
 🕐 2026-08-17 10:20 UTC
-
+──────────────────
 This is the snippet text…
 
 [ Buka di Dashboard ]   ← button, opens the message

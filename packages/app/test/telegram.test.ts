@@ -97,6 +97,17 @@ describe('buildTelegramMessage', () => {
     expect(msg.indexOf('🕐')).toBeLessThan(msg.indexOf('This is the snippet.'));
   });
 
+  it('separates the header from the content with a rule', () => {
+    const msg = buildTelegramMessage({ ...base, receivedAt: 1723884000, fullBody: true });
+    const headerEnd = msg.indexOf('🕐');
+    const rule = msg.indexOf('──────────────────');
+    const snippet = msg.indexOf('This is the snippet.');
+    expect(rule).toBeGreaterThan(headerEnd);
+    expect(rule).toBeLessThan(snippet);
+    // The full body comes after the rule too, not glued to the header.
+    expect(msg.indexOf('Full body')).toBeGreaterThan(rule);
+  });
+
   it('omits the timestamp when arrival time is unknown', () => {
     const msg = buildTelegramMessage(base);
     expect(msg).not.toContain('🕐');

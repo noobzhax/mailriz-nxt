@@ -79,19 +79,24 @@ function formatReceivedAt(seconds: number): string {
   return new Date(seconds * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 }
 
+/** Rule separating the header block from the snippet/body. */
+const SEPARATOR = '──────────────────';
+
 /** Build the notification text (HTML parse mode); full body capped at 4096. */
 export function buildTelegramMessage(input: TelegramMessageInput): string {
   const sender = input.fromName
     ? `<b>${escapeHtml(input.fromName)}</b> &lt;${escapeHtml(input.fromAddress)}&gt;`
     : `<b>${escapeHtml(input.fromAddress)}</b>`;
-  const lines = [
+  const header = [
     `📬 ${sender}`,
     `alias: <code>${escapeHtml(input.localPart)}@${escapeHtml(input.domain)}</code>`,
     input.subject ? `Subject: <b>${escapeHtml(input.subject)}</b>` : '',
     input.receivedAt ? `🕐 ${formatReceivedAt(input.receivedAt)}` : '',
-    escapeHtml(input.snippet),
-  ];
-  let msg = lines.filter((l) => l !== '').join('\n');
+  ].filter((l) => l !== '').join('\n');
+
+  // Header first, then a rule, then the content — the scan line separates
+  // who/what from the actual message text.
+  let msg = `${header}\n${SEPARATOR}\n${escapeHtml(input.snippet)}`;
 
   if (input.fullBody && input.bodyText) {
     msg += `\n\n${escapeHtml(input.bodyText)}`;
