@@ -7,3 +7,6 @@ dist/
 release/
 *.log
 .DS_Store
+
+# Local release build output (CI builds its own)
+packages/app/.release/
