@@ -55,10 +55,10 @@
       },
     },
     "packages/cli": {
-      "name": "mailriz-cli",
+      "name": "mailriz-cli-nxt",
       "version": "0.1.0",
       "bin": {
-        "mailriz-cli": "./dist/cli.js",
+        "mailriz-cli": "dist/cli.js",
       },
       "dependencies": {
         "wrangler": "^4",
@@ -861,7 +861,7 @@
 
     "mailriz-app": ["mailriz-app@workspace:packages/app"],
 
-    "mailriz-cli": ["mailriz-cli@workspace:packages/cli"],
+    "mailriz-cli-nxt": ["mailriz-cli-nxt@workspace:packages/cli"],
 
     "mailriz-docs": ["mailriz-docs@workspace:docs"],
 
