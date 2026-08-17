@@ -70,6 +70,13 @@ export interface TelegramMessageInput {
   fullBody: boolean;
   dashboardHostname: string;
   emailId: string;
+  /** Unix seconds the mail arrived; rendered as a UTC timestamp line. */
+  receivedAt?: number;
+}
+
+/** `2026-08-17 10:20 UTC` from unix seconds. */
+function formatReceivedAt(seconds: number): string {
+  return new Date(seconds * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 }
 
 /** Build the notification text (HTML parse mode); full body capped at 4096. */
@@ -81,6 +88,7 @@ export function buildTelegramMessage(input: TelegramMessageInput): string {
     `📬 ${sender}`,
     `alias: <code>${escapeHtml(input.localPart)}@${escapeHtml(input.domain)}</code>`,
     input.subject ? `Subject: <b>${escapeHtml(input.subject)}</b>` : '',
+    input.receivedAt ? `🕐 ${formatReceivedAt(input.receivedAt)}` : '',
     escapeHtml(input.snippet),
   ];
   let msg = lines.filter((l) => l !== '').join('\n');

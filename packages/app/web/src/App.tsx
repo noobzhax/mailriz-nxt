@@ -297,6 +297,32 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
   // back button useless.
   const setQ = (next: string) => navigate({ ...route, q: next, emailId: null }, { replace: true });
 
+  /**
+   * Manual refresh: reload from the first page, exactly like the live stream
+   * does on new mail. Used by the toolbar button and the R shortcut.
+   */
+  const refreshFromTop = () => {
+    triggerRefreshSpin();
+    emails.refreshFromTop();
+  };
+
+  // The R shortcut. Held in a ref so the listener never re-binds; skipped
+  // while typing in a field so "reply to newsletter" doesn't reload the list.
+  const refreshRef = useRef(refreshFromTop);
+  refreshRef.current = refreshFromTop;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.key === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        refreshRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-text">
       {/* Off-canvas scrim, below lg only */}
@@ -350,10 +376,7 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
           scope={scope}
           q={q}
           setQ={setQ}
-          onRefresh={() => {
-            triggerRefreshSpin();
-            emails.refetch();
-          }}
+          onRefresh={refreshFromTop}
           onMenu={() => setNavOpen(true)}
           dark={theme.dark}
           toggleTheme={theme.toggle}
@@ -808,12 +831,12 @@ function Topbar(props: {
         </div>
 
         <Tooltip
-          label={
+label={
             props.refreshing
-              ? 'Refreshing…'
+              ? 'Refreshing.'
               : props.live
-                ? 'Refresh mail · new mail arrives on its own'
-                : 'Refresh mail · live updates disconnected'
+                ? 'Refresh mail (R) · new mail arrives on its own'
+                : 'Refresh mail (R) · live updates disconnected'
           }
           side="bottom"
         >

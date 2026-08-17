@@ -182,6 +182,7 @@ async function notifyTelegram(
       fullBody: !!settings!.telegram_full_body,
       dashboardHostname: env.DASHBOARD_HOSTNAME || '',
       emailId: mail.id,
+      receivedAt: Math.floor(Date.now() / 1000),
     });
     const buttonUrl = env.DASHBOARD_HOSTNAME
       ? `https://${env.DASHBOARD_HOSTNAME}/inbox/${mail.id}`

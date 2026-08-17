@@ -90,6 +90,17 @@ describe('buildTelegramMessage', () => {
     const msg = buildTelegramMessage({ ...base, subject: '' });
     expect(msg).not.toContain('Subject:');
   });
+
+  it('renders the received time as a UTC timestamp line', () => {
+    const msg = buildTelegramMessage({ ...base, receivedAt: 1723884000 });
+    expect(msg).toContain('🕐 2024-08-17 08:40 UTC');
+    expect(msg.indexOf('🕐')).toBeLessThan(msg.indexOf('This is the snippet.'));
+  });
+
+  it('omits the timestamp when arrival time is unknown', () => {
+    const msg = buildTelegramMessage(base);
+    expect(msg).not.toContain('🕐');
+  });
 });
 
 describe('sendTelegramMessage', () => {

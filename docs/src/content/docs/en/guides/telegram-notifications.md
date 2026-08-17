@@ -80,13 +80,16 @@ application so Telegram's servers can reach it without a session.
 📬 Jane Doe <jane@example.com>
 alias: newsletter@yourdomain.com
 Subject: Hello from Jane
+🕐 2026-08-17 10:20 UTC
+
 This is the snippet text…
 
 [ Buka di Dashboard ]   ← button, opens the message
 ```
 
 The message uses Telegram's HTML formatting; anything a sender writes is
-escaped, so `<script>` in a subject can never render as markup.
+escaped, so `<script>` in a subject can never render as markup. The arrival
+time is UTC so every chat renders the same moment.
 
 ## Notes
 

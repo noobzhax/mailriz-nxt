@@ -83,13 +83,16 @@ path-scoped agar server Telegram bisa menjangkaunya tanpa sesi.
 📬 Jane Doe <jane@example.com>
 alias: newsletter@yourdomain.com
 Subject: Hello from Jane
+🕐 2026-08-17 10:20 UTC
+
 This is the snippet text…
 
 [ Buka di Dashboard ]   ← tombol, membuka pesannya
 ```
 
 Pesan memakai format HTML Telegram; apa pun yang ditulis pengirim di-escape,
-jadi `<script>` di subjek tidak akan pernah tampil sebagai markup.
+jadi `<script>` di subjek tidak akan pernah tampil sebagai markup. Waktu
+kedatangan memakai UTC agar semua chat menampilkan momen yang sama.
 
 ## Catatan
 

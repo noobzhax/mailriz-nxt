@@ -44,10 +44,12 @@ telegramWebhookRoutes.post('/webhook', async (c) => {
     await env.DB.prepare('UPDATE settings SET telegram_refresh_at = ?1 WHERE user_id = ?2')
       .bind(Math.floor(Date.now() / 1000), env.ADMIN_EMAIL || '')
       .run();
-    // Acknowledge; a failed reply must not matter to the refresh itself.
+    // Acknowledge. This must be awaited: an unawaited fetch dies with the
+    // request, and the user would see no reply at all. A failed reply still
+    // must not matter to the refresh itself.
     const token = env.TELEGRAM_BOT_TOKEN as string | undefined;
     if (token) {
-      fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: chatId, text: '🔄 Memeriksa inbox…' }),
