@@ -1,4 +1,5 @@
 import { Env } from '../types';
+import { Language } from '@mailriz/shared';
 
 /**
  * Telegram email notifications.
@@ -16,6 +17,39 @@ export interface TelegramSettingsRow {
   telegram_full_body: number;
   telegram_webhook_secret?: string | null;
   telegram_refresh_at?: number | null;
+  /** UI language; 'en' is the baseline, 'id' lands later. */
+  language?: string | null;
+}
+
+/**
+ * User-visible strings in Telegram messages. English is the baseline;
+ * the `id` entries mirror it until the Indonesian translation lands.
+ */
+const TELEGRAM_LABELS: Record<Language, {
+  alias: string;
+  subject: string;
+  openButton: string;
+  refreshing: string;
+  testMessage: string;
+}> = {
+  en: {
+    alias: 'alias',
+    subject: 'Subject',
+    openButton: 'Open in Dashboard',
+    refreshing: '🔄 Checking inbox…',
+    testMessage: '🔔 MailRiz test message — Telegram notifications are working.',
+  },
+  id: {
+    alias: 'alias',
+    subject: 'Subject',
+    openButton: 'Open in Dashboard',
+    refreshing: '🔄 Checking inbox…',
+    testMessage: '🔔 MailRiz test message — Telegram notifications are working.',
+  },
+};
+
+export function telegramLabels(lang: Language | string | null | undefined) {
+  return TELEGRAM_LABELS[lang === 'id' ? 'id' : 'en'];
 }
 
 /** Telegram's hard cap on message length. */
@@ -72,6 +106,8 @@ export interface TelegramMessageInput {
   emailId: string;
   /** Unix seconds the mail arrived; rendered as a UTC timestamp line. */
   receivedAt?: number;
+  /** Drives the label language; en when absent. */
+  language?: Language | string | null;
 }
 
 /** `2026-08-17 10:20 UTC` from unix seconds. */
@@ -84,13 +120,14 @@ const SEPARATOR = '──────────────────';
 
 /** Build the notification text (HTML parse mode); full body capped at 4096. */
 export function buildTelegramMessage(input: TelegramMessageInput): string {
+  const labels = telegramLabels(input.language);
   const sender = input.fromName
     ? `<b>${escapeHtml(input.fromName)}</b> &lt;${escapeHtml(input.fromAddress)}&gt;`
     : `<b>${escapeHtml(input.fromAddress)}</b>`;
   const header = [
     `📬 ${sender}`,
-    `alias: <code>${escapeHtml(input.localPart)}@${escapeHtml(input.domain)}</code>`,
-    input.subject ? `Subject: <b>${escapeHtml(input.subject)}</b>` : '',
+    `${labels.alias}: <code>${escapeHtml(input.localPart)}@${escapeHtml(input.domain)}</code>`,
+    input.subject ? `${labels.subject}: <b>${escapeHtml(input.subject)}</b>` : '',
     input.receivedAt ? `🕐 ${formatReceivedAt(input.receivedAt)}` : '',
   ].filter((l) => l !== '').join('\n');
 
@@ -125,7 +162,7 @@ export async function sendTelegramMessage(
   env: Env,
   chatId: string,
   text: string,
-  opts: { buttonUrl?: string } = {}
+  opts: { buttonUrl?: string; buttonLabel?: string } = {}
 ): Promise<TelegramSendResult> {
   const token = env.TELEGRAM_BOT_TOKEN;
   if (!token) return { ok: false, error: 'No bot token deployed' };
@@ -134,7 +171,7 @@ export async function sendTelegramMessage(
     if (opts.buttonUrl) {
       body.parse_mode = 'HTML';
       body.reply_markup = {
-        inline_keyboard: [[{ text: 'Buka di Dashboard', url: opts.buttonUrl }]],
+        inline_keyboard: [[{ text: opts.buttonLabel || 'Open in Dashboard', url: opts.buttonUrl }]],
       };
     }
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {

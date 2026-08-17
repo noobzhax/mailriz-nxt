@@ -126,7 +126,7 @@ describe('sendTelegramMessage', () => {
       expect(body.chat_id).toBe('123456');
       expect(body.text).toContain('<b>Hello</b>');
       expect(body.parse_mode).toBe('HTML');
-      expect(body.reply_markup.inline_keyboard[0][0].text).toBe('Buka di Dashboard');
+      expect(body.reply_markup.inline_keyboard[0][0].text).toBe('Open in Dashboard');
       expect(body.reply_markup.inline_keyboard[0][0].url).toBe('https://inbox.rizpedia.com/inbox/01ABC');
       return new Response(JSON.stringify({ ok: true }));
     }) as any;

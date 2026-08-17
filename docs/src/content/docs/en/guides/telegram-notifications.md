@@ -73,6 +73,9 @@ application so Telegram's servers can reach it without a session.
 - **Per-alias mute** — the bell next to an alias in the dashboard sidebar
   mutes that alias only. Handy for noisy newsletters: mute the newsletter
   alias, keep everything else loud. The mute applies to all chats at once.
+- **Language** — Settings → Language picks the UI language for the dashboard
+  *and* the Telegram messages (labels, the open button, the /refresh reply).
+  English is the baseline today; Bahasa Indonesia lands later.
 
 ## What a notification looks like
 

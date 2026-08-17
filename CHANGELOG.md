@@ -4,6 +4,25 @@ All notable changes to MailRiz NXT — the fork of
 [MailRiz](https://github.com/rizkirmdhnnn/mailriz) with Telegram
 notifications. Releases follow [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [v1.5.0] — 2026-08-17
+
+### Added
+- **Language setting** (Settings → Language, `en`/`id`), stored in D1
+  (migration `0006`) and exposed through `/api/me` and the settings API.
+  It drives the dashboard UI *and* the Telegram messages (labels, the open
+  button, the `/refresh` reply).
+- **i18n foundation**: every user-visible dashboard string now lives in a
+  typed dictionary (`lib/i18n.ts`). English is the complete baseline;
+  Bahasa Indonesia entries fall back to English until the translation lands
+  (the selector shows a "soon" note when `id` is picked).
+- Web tests for the dictionary.
+
+### Changed
+- Telegram message labels (`alias`, `Subject`, button text, `/refresh` reply,
+  test message) come from the language setting instead of being hardcoded.
+
+[v1.5.0]: https://github.com/noobzhax/mailriz-nxt/releases/tag/v1.5.0
+
 ## [v1.4.2] — 2026-08-17
 
 ### Changed

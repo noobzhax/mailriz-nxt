@@ -76,6 +76,9 @@ path-scoped agar server Telegram bisa menjangkaunya tanpa sesi.
   mem-bisukan alias itu saja. Berguna untuk newsletter berisik: bisukan alias
   newsletter-nya, biarkan yang lain tetap nyaring. Mute berlaku untuk semua
   chat sekaligus.
+- **Bahasa** — Settings → Language memilih bahasa UI untuk dashboard
+  *dan* pesan Telegram (label, tombol buka, balasan /refresh). Bahasa Inggris
+  adalah baseline saat ini; Bahasa Indonesia menyusul kemudian.
 
 ## Seperti apa notifikasinya
 

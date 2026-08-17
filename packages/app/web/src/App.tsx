@@ -12,6 +12,7 @@ import {
 import { api, ApiError } from './lib/api';
 import { useRoute } from './lib/useRoute';
 import { toScope, toView, DEFAULT_ROUTE } from './lib/route';
+import { useI18n, type I18nKey } from './lib/i18n';
 import { Tooltip } from './lib/Tooltip';
 import { Logo } from './lib/Logo';
 import { Resizer } from './lib/Resizer';
@@ -27,11 +28,11 @@ import {
 
 // ---------------------------------------------------------------- helpers
 
-const VIEWS: { id: EmailView; label: string; icon: any }[] = [
-  { id: 'inbox', label: 'Inbox', icon: Inbox },
-  { id: 'starred', label: 'Starred', icon: Star },
-  { id: 'archived', label: 'Archived', icon: Archive },
-  { id: 'trash', label: 'Trash', icon: Trash2 },
+const VIEWS: { id: EmailView; label: I18nKey; icon: any }[] = [
+  { id: 'inbox', label: 'folders.inbox', icon: Inbox },
+  { id: 'starred', label: 'folders.starred', icon: Star },
+  { id: 'archived', label: 'folders.archived', icon: Archive },
+  { id: 'trash', label: 'folders.trash', icon: Trash2 },
 ];
 
 /** Shared control chrome: search field, icon buttons, chips. */
@@ -216,6 +217,7 @@ export default function App() {
 type Theme = ReturnType<typeof useTheme>;
 
 function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
+  const { t } = useI18n(me?.language);
   // The URL holds what's on screen, so a reload or the back button lands where
   // you were instead of resetting to the inbox.
   const { route, navigate } = useRoute();
@@ -261,13 +263,13 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
   const activeLabel = labels.data?.find((l) => l.id === labelId) || null;
   // Mailbox and folder are separate axes now, so name both — "@news · Starred"
   // rather than just "@news", which gave no clue which folder was open.
-  const folder = VIEWS.find((v) => v.id === view)!.label;
+  const folder = t(`folders.${view}` as I18nKey);
   const mailbox = activeAlias
     ? `@${activeAlias.local_part}`
     : activeLabel
       ? activeLabel.name
       : null;
-  const scope = settings ? 'Settings' : (mailbox ? `${mailbox} · ${folder}` : folder);
+  const scope = settings ? t('sidebar.settings') : (mailbox ? `${mailbox} · ${folder}` : folder);
 
   /** Switch mailbox — all mail, an alias, or a label. */
   const goScope = (patch: { aliasId?: string | null; labelId?: string | null }) => {
@@ -359,6 +361,7 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
         telegramConfigured={!!(telegram.data?.hasToken && telegram.data?.enabled && telegram.data?.chatIds.length)}
         onToggleMute={(a) => toggleMute.mutate(a)}
         me={me}
+        t={t}
       />
 
       {sidebarOpen && (
@@ -386,11 +389,12 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
           onMenu={() => setNavOpen(true)}
           dark={theme.dark}
           toggleTheme={theme.toggle}
+          t={t}
         />
 
         <main className="flex min-h-0 flex-1 flex-col gap-5 p-4 sm:p-6">
           {settings ? (
-            <SettingsPane onBack={() => navigate(DEFAULT_ROUTE)} />
+            <SettingsPane onBack={() => navigate(DEFAULT_ROUTE)} t={t} />
           ) : (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-card border border-border bg-surface shadow-[var(--shadow)] lg:flex-row">
             <FolderRail
@@ -398,6 +402,7 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
               unread={emails.emails.filter((e) => !e.is_read).length}
               hasMore={!!emails.next}
               onPick={goView}
+              t={t}
             />
 
             {/* List and reading pane only sit side by side from xl up. Below
@@ -419,6 +424,7 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
                 loadMore={emails.loadMore}
                 hasMore={emails.next !== null}
                 isLoading={emails.isLoading}
+                t={t}
               />
             </div>
 
@@ -440,9 +446,9 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
               )}
             >
               {selectedEmail ? (
-                <ReadingPane emailId={selectedEmail.id} onBack={() => openEmail(null)} />
+                <ReadingPane emailId={selectedEmail.id} onBack={() => openEmail(null)} t={t} />
               ) : (
-                <EmptyPane />
+                <EmptyPane t={t} />
               )}
             </div>
           </div>
@@ -451,7 +457,7 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
       </div>
 
       {showNewAlias && (
-        <NewAliasModal onClose={() => setShowNewAlias(false)} />
+        <NewAliasModal onClose={() => setShowNewAlias(false)} t={t} />
       )}
     </div>
   );
@@ -475,11 +481,12 @@ function Brand() {
 }
 
 function ThemeToggle({ theme }: { theme: Theme }) {
+  const { t } = useI18n('en');
   return (
     <button
       onClick={theme.toggle}
       className={clsx(ICON_BUTTON, 'absolute top-5 right-5')}
-      title={theme.dark ? 'Switch to light theme' : 'Switch to dark theme'}
+      title={theme.dark ? t('topbar.themeLight') : t('topbar.themeDark')}
     >
       {theme.dark ? <Sun size={16} /> : <Moon size={16} />}
     </button>
@@ -487,12 +494,13 @@ function ThemeToggle({ theme }: { theme: Theme }) {
 }
 
 function Splash({ theme }: { theme: Theme }) {
+  const { t } = useI18n('en');
   return (
     <div className="relative grid min-h-screen place-items-center bg-bg text-text">
       <ThemeToggle theme={theme} />
       <div className="flex flex-col items-center gap-4">
         <Brand />
-        <div className="text-[13.5px] text-text-faint">Loading…</div>
+        <div className="text-[13.5px] text-text-faint">{t('list.loading')}</div>
       </div>
     </div>
   );
@@ -501,6 +509,9 @@ function Splash({ theme }: { theme: Theme }) {
 /** Session-mode sign-in. The worker sets an HttpOnly cookie, so on success we
  *  only have to let the queries run again — there's no token to hold onto. */
 function LoginScreen({ theme }: { theme: Theme }) {
+  // The login screen renders before /api/me has answered, so the language is
+  // not known yet — English is the baseline until the session starts.
+  const { t } = useI18n('en');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -536,7 +547,7 @@ function LoginScreen({ theme }: { theme: Theme }) {
 
         <div className="mt-7">
           <label htmlFor="login-email" className="text-[12.5px] font-semibold text-text-dim">
-            Email
+            {t('auth.email')}
           </label>
           <input
             id="login-email"
@@ -545,14 +556,14 @@ function LoginScreen({ theme }: { theme: Theme }) {
             autoFocus
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
+            placeholder={t('auth.emailPlaceholder')}
             className={field}
           />
         </div>
 
         <div className="mt-4">
           <label htmlFor="login-password" className="text-[12.5px] font-semibold text-text-dim">
-            Password
+            {t('auth.password')}
           </label>
           <input
             id="login-password"
@@ -577,7 +588,7 @@ function LoginScreen({ theme }: { theme: Theme }) {
           disabled={login.isPending || !email || !password}
           className="mt-6 w-full rounded-control bg-accent py-2.5 text-[14px] font-semibold text-accent-ink transition hover:bg-accent-strong disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         >
-          {login.isPending ? 'Signing in…' : 'Sign in'}
+          {login.isPending ? t('auth.signingIn') : t('auth.signIn')}
         </button>
       </form>
     </div>
@@ -613,6 +624,7 @@ function Sidebar(props: {
   telegramConfigured: boolean;
   onToggleMute: (alias: Alias) => void;
   me?: MeResponse;
+  t: (key: I18nKey) => string;
 }) {
   const navItem =
     'flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-[14.5px] transition ' +
@@ -634,13 +646,13 @@ function Sidebar(props: {
       <div className="flex items-center gap-2.5 p-4">
         <Logo size={44} />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-extrabold tracking-tight">MailRiz</div>
+          <div className="truncate text-[15px] font-extrabold tracking-tight">{props.t('app.name')}</div>
           <div className="truncate text-[11px] font-bold tracking-widest text-text-faint uppercase">
-            Private Inbox
+            {props.t('app.tagline')}
           </div>
         </div>
-        <Tooltip label="Close menu" side="left">
-          <button onClick={props.close} aria-label="Close menu" className={clsx(ICON_BUTTON, 'lg:hidden')}>
+        <Tooltip label={props.t('sidebar.closeMenu')} side="left">
+          <button onClick={props.close} aria-label={props.t('sidebar.closeMenu')} className={clsx(ICON_BUTTON, 'lg:hidden')}>
             <X size={16} />
           </button>
         </Tooltip>
@@ -651,7 +663,7 @@ function Sidebar(props: {
           onClick={props.onNewAlias}
           className="flex w-full items-center justify-center gap-2 rounded-control bg-accent px-3 py-2.5 text-[14px] font-semibold text-accent-ink transition hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         >
-          <Plus size={16} /> New Alias
+          <Plus size={16} /> {props.t('sidebar.newAlias')}
         </button>
       </div>
 
@@ -669,12 +681,12 @@ function Sidebar(props: {
           )}
         >
           <Inbox size={16} className="shrink-0" />
-          <span className="truncate">All mail</span>
+          <span className="truncate">{props.t('sidebar.allMail')}</span>
         </button>
 
         {props.labels && props.labels.length > 0 && (
           <>
-            <SectionLabel icon={Tag}>Labels</SectionLabel>
+            <SectionLabel icon={Tag}>{props.t('sidebar.labels')}</SectionLabel>
             {props.labels.map((l) => (
               <button
                 key={l.id}
@@ -695,7 +707,7 @@ function Sidebar(props: {
 
         {props.aliases && props.aliases.length > 0 && (
           <>
-            <SectionLabel icon={Mail}>Aliases</SectionLabel>
+            <SectionLabel icon={Mail}>{props.t('sidebar.aliases')}</SectionLabel>
             {props.aliases.map((a) => (
               <button
                 key={a.id}
@@ -712,16 +724,16 @@ function Sidebar(props: {
                 <span className="flex shrink-0 items-center gap-1">
                   {!a.is_enabled ? (
                     <span className="shrink-0 rounded-pill bg-surface-3 px-2 py-0.5 text-[11px] font-semibold text-text-faint">
-                      off
+                      {props.t('sidebar.off')}
                     </span>
                   ) : a.is_auto ? (
                     /* Created by the catch-all on first delivery, not by hand —
                        worth marking so an unfamiliar address is explicable. */
                     <span
-                      title="Created automatically when mail first arrived"
+                      title={props.t('sidebar.autoTitle')}
                       className="shrink-0 rounded-pill bg-surface-3 px-2 py-0.5 text-[11px] font-semibold text-text-faint"
                     >
-                      auto
+                      {props.t('sidebar.auto')}
                     </span>
                   ) : null}
                   {props.telegramConfigured && (
@@ -730,8 +742,8 @@ function Sidebar(props: {
                         e.stopPropagation();
                         props.onToggleMute(a);
                       }}
-                      title={a.telegram_muted ? 'Unmute Telegram notifications' : 'Mute Telegram notifications'}
-                      aria-label={a.telegram_muted ? 'Unmute' : 'Mute'}
+                      title={a.telegram_muted ? props.t('sidebar.unmute') : props.t('sidebar.mute')}
+                      aria-label={a.telegram_muted ? props.t('sidebar.unmute') : props.t('sidebar.mute')}
                       className="grid size-6 shrink-0 place-items-center rounded-[8px] text-text-faint transition hover:bg-surface-3 hover:text-text"
                     >
                       {a.telegram_muted ? <BellOff size={13} /> : <Bell size={13} />}
@@ -756,7 +768,7 @@ function Sidebar(props: {
           )}
         >
           <Settings size={16} className="shrink-0" />
-          <span className="truncate">Settings</span>
+          <span className="truncate">{props.t('sidebar.settings')}</span>
           {props.settings && <ChevronRight size={14} className="ml-auto shrink-0 opacity-60" />}
         </button>
         <div className="flex w-full items-center gap-3 rounded-[12px] p-1.5">
@@ -770,7 +782,7 @@ function Sidebar(props: {
           <Tooltip label="Sign out" side="top">
             <button
               onClick={props.onLogout}
-              aria-label="Sign out"
+              aria-label={props.t('sidebar.signOut')}
               className="grid size-9 shrink-0 place-items-center rounded-[10px] text-text-dim transition hover:bg-surface-2 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
             >
               <LogOut size={16} />
@@ -794,19 +806,20 @@ function Topbar(props: {
   onMenu: () => void;
   sidebarOpen: boolean; toggleSidebar: () => void;
   dark: boolean; toggleTheme: () => void;
+  t: (key: I18nKey) => string;
 }) {
   return (
     <div className="sticky top-0 z-30 flex h-[66px] shrink-0 items-center gap-3 border-b border-border bg-surface/80 px-4 backdrop-blur sm:px-6">
-      <Tooltip label="Open menu" side="bottom">
-        <button onClick={props.onMenu} aria-label="Open menu" className={clsx(ICON_BUTTON, 'lg:hidden')}>
+      <Tooltip label={props.t('topbar.openMenu')} side="bottom">
+        <button onClick={props.onMenu} aria-label={props.t('topbar.openMenu')} className={clsx(ICON_BUTTON, 'lg:hidden')}>
           <Menu size={18} />
         </button>
       </Tooltip>
 
-      <Tooltip label={props.sidebarOpen ? 'Hide sidebar' : 'Show sidebar'} side="bottom">
+      <Tooltip label={props.sidebarOpen ? props.t('topbar.hideSidebar') : props.t('topbar.showSidebar')} side="bottom">
         <button
           onClick={props.toggleSidebar}
-          aria-label={props.sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+          aria-label={props.sidebarOpen ? props.t('topbar.hideSidebar') : props.t('topbar.showSidebar')}
           className={clsx(ICON_BUTTON, 'hidden lg:grid')}
         >
           {props.sidebarOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
@@ -815,7 +828,7 @@ function Topbar(props: {
 
       <div className="hidden min-w-0 sm:block">
         <div className="truncate text-[12px] text-text-faint">MailRiz / {props.scope}</div>
-        <div className="truncate text-[15px] font-bold">Mail</div>
+        <div className="truncate text-[15px] font-bold">{props.t('topbar.mail')}</div>
       </div>
 
       <div className="ml-auto flex items-center gap-2">
@@ -827,8 +840,8 @@ function Topbar(props: {
           <input
             value={props.q}
             onChange={(e) => props.setQ(e.target.value)}
-            placeholder="Search mail…"
-            aria-label="Search mail"
+            placeholder={props.t('topbar.searchPlaceholder')}
+            aria-label={props.t('topbar.search')}
             className={clsx(
               CONTROL,
               'h-[38px] w-[180px] pr-3 pl-9 text-[13px] text-text placeholder:text-text-faint sm:w-[260px]'
@@ -839,17 +852,17 @@ function Topbar(props: {
         <Tooltip
 label={
             props.refreshing
-              ? 'Refreshing.'
+              ? props.t('topbar.refreshing')
               : props.live
-                ? 'Refresh mail (R) · new mail arrives on its own'
-                : 'Refresh mail (R) · live updates disconnected'
+                ? props.t('topbar.refreshLive')
+                : props.t('topbar.refreshDisconnected')
           }
           side="bottom"
         >
           <button
             onClick={props.onRefresh}
             disabled={props.refreshing}
-            aria-label="Refresh mail"
+            aria-label={props.t('topbar.refresh')}
             className={clsx(ICON_BUTTON, 'relative')}
           >
             {/* Spins while a fetch is in flight, so pressing it visibly does
@@ -867,10 +880,10 @@ label={
           </button>
         </Tooltip>
 
-        <Tooltip label={props.dark ? 'Switch to light theme' : 'Switch to dark theme'} side="bottom">
+        <Tooltip label={props.dark ? props.t('topbar.themeLight') : props.t('topbar.themeDark')} side="bottom">
           <button
             onClick={props.toggleTheme}
-            aria-label={props.dark ? 'Switch to light theme' : 'Switch to dark theme'}
+            aria-label={props.dark ? props.t('topbar.themeLight') : props.t('topbar.themeDark')}
             className={ICON_BUTTON}
           >
             {props.dark ? <Sun size={16} /> : <Moon size={16} />}
@@ -888,6 +901,7 @@ function FolderRail(props: {
   unread: number;
   hasMore: boolean;
   onPick: (v: EmailView) => void;
+  t: (key: I18nKey) => string;
 }) {
   return (
     <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border p-3 lg:w-[196px] lg:flex-col lg:overflow-x-visible lg:overflow-y-auto lg:border-r lg:border-b-0">
@@ -907,7 +921,7 @@ function FolderRail(props: {
             )}
           >
             <Icon size={16} className="shrink-0" />
-            {v.label}
+            {props.t(v.label)}
             {/* Only the open folder has a count we can honestly show — it
                 counts what's loaded, so "+" marks that more pages exist. */}
             {active && props.unread > 0 && (
@@ -931,11 +945,12 @@ function EmailList(props: {
   loadMore: () => void;
   hasMore: boolean;
   isLoading: boolean;
+  t: (key: I18nKey) => string;
 }) {
   if (props.isLoading && props.emails.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center p-6 text-[14px] text-text-faint">
-        Loading…
+        {props.t('list.loading')}
       </div>
     );
   }
@@ -944,7 +959,7 @@ function EmailList(props: {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-text-faint">
         <MailOpen size={36} className="opacity-40" />
-        <div className="text-[14px]">No emails</div>
+        <div className="text-[14px]">{props.t('list.noEmails')}</div>
       </div>
     );
   }
@@ -1011,7 +1026,7 @@ function EmailList(props: {
 
 // ---------------------------------------------------------------- reading pane
 
-function ReadingPane({ emailId, onBack }: { emailId: string; onBack: () => void }) {
+function ReadingPane({ emailId, onBack, t }: { emailId: string; onBack: () => void; t: (key: I18nKey) => string }) {
   const { data, isLoading } = useQuery<EmailDetail>({
     queryKey: ['email', emailId],
     queryFn: () => api.get(`/api/emails/${emailId}`),
@@ -1034,7 +1049,7 @@ function ReadingPane({ emailId, onBack }: { emailId: string; onBack: () => void 
   if (isLoading || !data) {
     return (
       <div className="flex flex-1 items-center justify-center text-[14px] text-text-faint">
-        Loading…
+        {t('list.loading')}
       </div>
     );
   }
@@ -1049,34 +1064,34 @@ function ReadingPane({ emailId, onBack }: { emailId: string; onBack: () => void 
       <div className="shrink-0 border-b border-border p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-2">
-            <Tooltip label="Back to list" side="right">
-              <button onClick={onBack} aria-label="Back to list" className={clsx(ICON_BUTTON, 'xl:hidden')}>
+            <Tooltip label={t('reading.back')} side="right">
+              <button onClick={onBack} aria-label={t('reading.back')} className={clsx(ICON_BUTTON, 'xl:hidden')}>
                 <ChevronLeft size={18} />
               </button>
             </Tooltip>
             <h2 className="min-w-0 pt-1 text-[19px] leading-snug font-bold break-words">
-              {data.subject || '(no subject)'}
+              {data.subject || t('reading.noSubject')}
             </h2>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <IconBtn title={data.is_starred ? 'Remove star' : 'Star this message'} active={!!data.is_starred} onClick={() => toggle('is_starred')}>
+            <IconBtn title={data.is_starred ? t('reading.unstar') : t('reading.star')} active={!!data.is_starred} onClick={() => toggle('is_starred')}>
               <Star size={16} className={data.is_starred ? 'fill-warn text-warn' : ''} />
             </IconBtn>
-            <IconBtn title={data.is_archived ? 'Move back to inbox' : 'Archive — keep it, out of the inbox'} active={!!data.is_archived} onClick={() => toggle('is_archived')}>
+            <IconBtn title={data.is_archived ? t('reading.unarchive') : t('reading.archive')} active={!!data.is_archived} onClick={() => toggle('is_archived')}>
               <Archive size={16} />
             </IconBtn>
-            <IconBtn title={data.is_trashed ? 'Restore from trash' : 'Move to trash — purged after 30 days'} active={!!data.is_trashed} onClick={() => toggle('is_trashed')}>
+            <IconBtn title={data.is_trashed ? t('reading.restore') : t('reading.trash')} active={!!data.is_trashed} onClick={() => toggle('is_trashed')}>
               <Trash2 size={16} />
             </IconBtn>
-            <IconBtn title={data.is_read ? 'Mark as unread' : 'Mark as read'} onClick={() => toggle('is_read')}>
+            <IconBtn title={data.is_read ? t('reading.markUnread') : t('reading.markRead')} onClick={() => toggle('is_read')}>
               <Mail size={16} />
             </IconBtn>
-            <Tooltip label="Download original .eml" side="bottom">
+            <Tooltip label={t('reading.downloadRaw')} side="bottom">
               <a
                 href={`/api/emails/${emailId}/raw`}
                 target="_blank"
                 rel="noreferrer"
-                aria-label="Download original .eml"
+                aria-label={t('reading.downloadRaw')}
                 className="grid size-9 place-items-center rounded-[10px] text-text-dim transition hover:bg-surface-2 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               >
                 <FileText size={16} />
@@ -1144,14 +1159,14 @@ function ReadingPane({ emailId, onBack }: { emailId: string; onBack: () => void 
                 <AlertTriangle size={16} className="shrink-0 text-warn" />
                 <span className="min-w-0 flex-1">
                   {data.blocked_images === 1
-                    ? '1 external image is blocked for your privacy.'
-                    : `${data.blocked_images} external images are blocked for your privacy.`}
+                    ? t('reading.blockedOne')
+                    : t('reading.blockedMany').replace('{n}', String(data.blocked_images))}
                 </span>
                 <button
                   onClick={() => { setShowImages(true); setIframeKey((k) => k + 1); }}
                   className="rounded-[10px] bg-accent px-3 py-1.5 text-[12.5px] font-semibold text-accent-ink transition hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                 >
-                  Show images
+                  {t('reading.showImages')}
                 </button>
               </div>
             )}
@@ -1168,13 +1183,13 @@ function ReadingPane({ emailId, onBack }: { emailId: string; onBack: () => void 
               src={`/api/emails/${emailId}/html${showImages ? '?images=1' : ''}`}
               className="email-frame"
               sandbox="allow-popups allow-popups-to-escape-sandbox"
-              title="Email body"
+              title={t('reading.emailBodyTitle')}
             />
           </>
         )}
 
         {!data.body_text && !data.html_r2_key && (
-          <div className="text-[14px] text-text-faint">No content.</div>
+          <div className="text-[14px] text-text-faint">{t('reading.noContent')}</div>
         )}
       </div>
     </div>
@@ -1201,18 +1216,18 @@ function IconBtn(props: { title: string; active?: boolean; onClick?: () => void;
   );
 }
 
-function EmptyPane() {
+function EmptyPane({ t }: { t: (key: I18nKey) => string }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-text-faint">
       <Mail size={44} className="opacity-30" />
-      <div className="text-[14px]">Select an email to read</div>
+      <div className="text-[14px]">{t('reading.empty')}</div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------- new alias modal
 
-function NewAliasModal({ onClose }: { onClose: () => void }) {
+function NewAliasModal({ onClose, t }: { onClose: () => void; t: (key: I18nKey) => string }) {
   const [mode, setMode] = useState<'random' | 'custom'>('random');
   const [prefix, setPrefix] = useState('');
   const [label, setLabel] = useState('');
@@ -1249,7 +1264,7 @@ function NewAliasModal({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-[17px] font-bold tracking-tight">New Alias</h3>
+          <h3 className="text-[17px] font-bold tracking-tight">{t('newAlias.title')}</h3>
           <button
             onClick={onClose}
             className="grid size-9 place-items-center rounded-[10px] text-text-dim transition hover:bg-surface-2 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
@@ -1271,33 +1286,33 @@ function NewAliasModal({ onClose }: { onClose: () => void }) {
                   : 'border-border bg-surface-2 text-text-dim hover:bg-surface-3 hover:text-text'
               )}
             >
-              {m}
+              {m === 'random' ? t('newAlias.modeRandom') : t('newAlias.modeCustom')}
             </button>
           ))}
         </div>
 
         {mode === 'custom' ? (
           <div className="mb-4">
-            <label className="text-[12.5px] font-semibold text-text-dim">Local part</label>
+            <label className="text-[12.5px] font-semibold text-text-dim">{t('newAlias.localPart')}</label>
             <input
               value={prefix}
               onChange={(e) => setPrefix(e.target.value)}
-              placeholder="newsletter"
+              placeholder={t('newAlias.localPartPlaceholder')}
               className={field}
             />
-            <p className="mt-1.5 text-[11.5px] text-text-faint">[a-z0-9._-], max 64 chars</p>
+            <p className="mt-1.5 text-[11.5px] text-text-faint">{t('newAlias.localPartHint')}</p>
           </div>
         ) : (
           <div className="mb-4">
-            <label className="text-[12.5px] font-semibold text-text-dim">Prefix (optional)</label>
+            <label className="text-[12.5px] font-semibold text-text-dim">{t('newAlias.prefix')}</label>
             <input
               value={prefix}
               onChange={(e) => setPrefix(e.target.value)}
-              placeholder="news"
+              placeholder={t('newAlias.prefixPlaceholder')}
               className={field}
             />
             <p className="mt-1.5 text-[11.5px] text-text-faint">
-              Random ={' '}
+              {t('newAlias.randomNote')}{' '}
               <code className="rounded-[6px] border border-border bg-surface px-1.5 text-[11px] font-semibold">
                 prefix-4hex
               </code>
@@ -1306,21 +1321,21 @@ function NewAliasModal({ onClose }: { onClose: () => void }) {
         )}
 
         <div className="mb-4">
-          <label className="text-[12.5px] font-semibold text-text-dim">Label</label>
+          <label className="text-[12.5px] font-semibold text-text-dim">{t('newAlias.label')}</label>
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            placeholder="Newsletters"
+            placeholder={t('newAlias.labelPlaceholder')}
             className={field}
           />
         </div>
 
         <div className="mb-5">
-          <label className="text-[12.5px] font-semibold text-text-dim">Note</label>
+          <label className="text-[12.5px] font-semibold text-text-dim">{t('newAlias.note')}</label>
           <input
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Where this is used"
+            placeholder={t('newAlias.notePlaceholder')}
             className={field}
           />
         </div>
@@ -1328,7 +1343,7 @@ function NewAliasModal({ onClose }: { onClose: () => void }) {
         {error && <div className="mb-4 text-[13.5px] text-danger">{error}</div>}
         {copied && (
           <div className="mb-4 flex items-center gap-1.5 text-[13.5px] text-ok">
-            <Check size={14} /> Copied to clipboard
+            <Check size={14} /> {t('newAlias.copied')}
           </div>
         )}
 
@@ -1337,7 +1352,7 @@ function NewAliasModal({ onClose }: { onClose: () => void }) {
           disabled={create.isPending}
           className="w-full rounded-control bg-accent py-2.5 text-[14px] font-semibold text-accent-ink transition hover:bg-accent-strong disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         >
-          {create.isPending ? 'Creating…' : 'Create Alias'}
+          {create.isPending ? t('newAlias.creating') : t('newAlias.create')}
         </button>
       </div>
     </div>
@@ -1387,7 +1402,7 @@ function SwitchRow(props: {
  * CLI (setup/reconfigure); this screen only sees whether it exists, plus the
  * chat id and the toggles stored in D1.
  */
-function SettingsPane({ onBack }: { onBack: () => void }) {
+function SettingsPane({ onBack, t }: { onBack: () => void; t: (key: I18nKey) => string }) {
   const qc = useQueryClient();
   const settings = useTelegramSettings();
 
@@ -1399,12 +1414,12 @@ function SettingsPane({ onBack }: { onBack: () => void }) {
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   const save = useMutation({
-    mutationFn: (body: { enabled?: boolean; chatIds?: string[]; fullBody?: boolean }) =>
+    mutationFn: (body: { enabled?: boolean; chatIds?: string[]; fullBody?: boolean; language?: 'en' | 'id' }) =>
       api.patch<TelegramSettings>('/api/settings/telegram', body),
     onSuccess: (saved) => {
       qc.invalidateQueries({ queryKey: ['telegram-settings'] });
       setChatIdsText(saved.chatIds.join(', '));
-      setNotice({ kind: 'ok', text: 'Saved' });
+      setNotice({ kind: 'ok', text: t('settingsPane.saved') });
       setTimeout(() => setNotice(null), 2000);
     },
     onError: (e: Error) => setNotice({ kind: 'error', text: e.message }),
@@ -1416,7 +1431,7 @@ function SettingsPane({ onBack }: { onBack: () => void }) {
 
   const test = useMutation({
     mutationFn: () => api.post<{ ok: boolean }>('/api/settings/telegram/test'),
-    onSuccess: () => setNotice({ kind: 'ok', text: 'Test message sent — check Telegram' }),
+    onSuccess: () => setNotice({ kind: 'ok', text: t('settingsPane.testSent') }),
     onError: (e: Error) => setNotice({ kind: 'error', text: e.message }),
   });
 
@@ -1429,7 +1444,7 @@ function SettingsPane({ onBack }: { onBack: () => void }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['telegram-webhook'] });
       qc.invalidateQueries({ queryKey: ['telegram-settings'] });
-      setNotice({ kind: 'ok', text: 'Webhook terdaftar — coba kirim /refresh ke bot di Telegram' });
+      setNotice({ kind: 'ok', text: t('settingsPane.webhookRegistered') });
       setTimeout(() => setNotice(null), 3000);
     },
     onError: (e: Error) => setNotice({ kind: 'error', text: e.message }),
@@ -1445,25 +1460,25 @@ function SettingsPane({ onBack }: { onBack: () => void }) {
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-[720px] flex-col overflow-hidden rounded-card border border-border bg-surface shadow-[var(--shadow)]">
       <div className="flex items-center gap-3 border-b border-border px-5 py-4">
-        <Tooltip label="Back to inbox" side="bottom">
+        <Tooltip label={t('settingsPane.back')} side="bottom">
           <button
             onClick={onBack}
-            aria-label="Back"
+            aria-label={t('settingsPane.back')}
             className="grid size-9 shrink-0 place-items-center rounded-[10px] text-text-dim transition hover:bg-surface-2 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
             <ChevronLeft size={18} />
           </button>
         </Tooltip>
         <div>
-          <h2 className="text-[17px] font-bold tracking-tight">Settings</h2>
-          <p className="text-[12px] text-text-faint">Telegram notifications</p>
+          <h2 className="text-[17px] font-bold tracking-tight">{t('settingsPane.title')}</h2>
+          <p className="text-[12px] text-text-faint">{t('settingsPane.subtitle')}</p>
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {!s ? (
           <div className="py-10 text-center text-[13.5px] text-text-dim">
-            {settings.isLoading ? 'Loading…' : 'Could not load settings'}
+            {settings.isLoading ? t('list.loading') : t('settingsPane.loadFailed')}
           </div>
         ) : (
           <div>
@@ -1471,36 +1486,31 @@ function SettingsPane({ onBack }: { onBack: () => void }) {
               <div className="mb-4 flex items-start gap-2.5 rounded-control border border-border bg-surface-2 px-3.5 py-3 text-[13px] text-text-dim">
                 <AlertTriangle size={16} className="mt-0.5 shrink-0 text-text-faint" />
                 <span>
-                  No bot token deployed. Create a bot with{' '}
-                  <span className="font-semibold text-text">@BotFather</span>, then run{' '}
-                  <code className="rounded bg-surface-3 px-1.5 py-0.5 text-[12px]">mailriz-cli reconfigure</code>{' '}
-                  and paste the token there.
+                  {t('settingsPane.noToken')}
                 </span>
               </div>
             )}
 
             <SwitchRow
-              label="Receive new-mail notifications"
-              description="A Telegram message for every incoming email, with a link to open it here."
+              label={t('settingsPane.enabled')}
+              description={t('settingsPane.enabledDesc')}
               checked={!!s.enabled}
               onChange={(v) => save.mutate({ enabled: v })}
             />
 
             <div className="border-t border-border py-3">
               <label className="text-[14px] font-semibold" htmlFor="tg-chat-id">
-                Chat ids
+                {t('settingsPane.chatIds')}
               </label>
               <p className="mt-0.5 mb-2 text-[12.5px] text-text-dim">
-                Chats the bot writes to, comma-separated. Message the bot once from each chat
-                (e.g. /start), then find the ids with{' '}
-                <span className="font-semibold text-text">@userinfobot</span>.
+                {t('settingsPane.chatIdsDesc')}
               </p>
               <div className="flex gap-2">
                 <input
                   id="tg-chat-id"
                   value={chatIdsText}
                   onChange={(e) => setChatIdsText(e.target.value)}
-                  placeholder="123456789, -1001234567890"
+                  placeholder={t('settingsPane.chatIdsPlaceholder')}
                   className={field}
                 />
                 <button
@@ -1508,27 +1518,49 @@ function SettingsPane({ onBack }: { onBack: () => void }) {
                   disabled={save.isPending}
                   className="shrink-0 rounded-control bg-accent px-4 text-[13.5px] font-semibold text-accent-ink transition hover:bg-accent-strong disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                 >
-                  Save
+                  {t('settingsPane.save')}
                 </button>
               </div>
             </div>
 
             <div className="border-t border-border">
               <SwitchRow
-                label="Include full message body"
-                description="Appends the plain-text body to each notification (capped at 4096 chars)."
+                label={t('settingsPane.fullBody')}
+                description={t('settingsPane.fullBodyDesc')}
                 checked={!!s.fullBody}
                 disabled={!canSend}
                 onChange={(v) => save.mutate({ fullBody: v })}
               />
             </div>
 
+            <div className="border-t border-border py-3">
+              <label className="text-[14px] font-semibold" htmlFor="tg-language">
+                {t('settingsPane.language')}
+              </label>
+              <p className="mt-0.5 mb-2 text-[12.5px] text-text-dim">
+                {t('settingsPane.languageDesc')}
+              </p>
+              <select
+                id="tg-language"
+                value={s.language}
+                onChange={(e) => save.mutate({ language: e.target.value as 'en' | 'id' })}
+                className={field}
+              >
+                <option value="en">{t('settingsPane.languageEn')}</option>
+                <option value="id">{t('settingsPane.languageId')}</option>
+              </select>
+              {s.language === 'id' && (
+                <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-amber-600">
+                  <AlertTriangle size={13} /> {t('settingsPane.languageIdSoon')}
+                </p>
+              )}
+            </div>
+
             <div className="border-t border-border py-4">
               <div className="mb-2">
-                <div className="text-[14px] font-semibold">Bot commands</div>
+                <div className="text-[14px] font-semibold">{t('settingsPane.botCommands')}</div>
                 <p className="mt-0.5 text-[12.5px] text-text-dim">
-                  Registers the webhook so <code className="rounded bg-surface-3 px-1.5 py-0.5 text-[12px]">/refresh</code>{' '}
-                  works: send it to the bot and this dashboard refetches immediately.
+                  {t('settingsPane.botCommandsDesc')}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -1537,16 +1569,16 @@ function SettingsPane({ onBack }: { onBack: () => void }) {
                   disabled={registerWebhook.isPending || !s.hasToken}
                   className="flex items-center gap-2 rounded-control border border-border bg-surface-2 px-4 py-2 text-[13.5px] font-semibold text-text transition hover:bg-surface-3 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                 >
-                  <RefreshCw size={14} /> {registerWebhook.isPending ? 'Registering…' : webhook.data?.registered ? 'Re-register webhook' : 'Register webhook'}
+                  <RefreshCw size={14} /> {registerWebhook.isPending ? t('settingsPane.registering') : webhook.data?.registered ? t('settingsPane.reRegister') : t('settingsPane.register')}
                 </button>
                 {webhook.data?.registered && (
                   <span className="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-600">
-                    <Check size={13} /> aktif
+                    <Check size={13} /> {t('settingsPane.active')}
                   </span>
                 )}
               </div>
               <p className="mt-1.5 text-[11.5px] text-text-faint">
-                {!s.hasToken ? 'Needs a bot token deployed.' : webhook.data?.registered ? 'Webhook aktif — /refresh siap dipakai.' : 'Belum terdaftar.'}
+                {!s.hasToken ? t('settingsPane.webhookHintNoToken') : webhook.data?.registered ? t('settingsPane.webhookHintActive') : t('settingsPane.webhookHintMissing')}
               </p>
             </div>
 
@@ -1556,10 +1588,10 @@ function SettingsPane({ onBack }: { onBack: () => void }) {
                 disabled={test.isPending || !canSend}
                 className="flex items-center gap-2 rounded-control border border-border bg-surface-2 px-4 py-2 text-[13.5px] font-semibold text-text transition hover:bg-surface-3 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               >
-                <Send size={14} /> {test.isPending ? 'Sending…' : 'Send test message'}
+                <Send size={14} /> {test.isPending ? t('settingsPane.sending') : t('settingsPane.test')}
               </button>
               <p className="mt-1.5 text-[11.5px] text-text-faint">
-                {canSend ? 'Delivers to every chat id above.' : 'Needs a bot token and at least one chat id.'}
+                {canSend ? t('settingsPane.testDesc') : t('settingsPane.testDescMissing')}
               </p>
             </div>
 

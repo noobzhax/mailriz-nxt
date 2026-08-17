@@ -17,6 +17,7 @@ interface SettingsRow {
   telegram_full_body: number;
   telegram_webhook_secret: string | null;
   telegram_refresh_at: number | null;
+  language?: string;
 }
 
 /** In-memory D1: one settings row + a small alias table. */
@@ -44,7 +45,7 @@ function makeEnv(overrides: Record<string, unknown> = {}) {
             },
             async run() {
               if (/INSERT INTO settings/i.test(sql)) {
-                const [userId, enabled, chatIds, fullBody] = args;
+                const [userId, enabled, chatIds, fullBody, language] = args;
                 const prev = settings.get(String(userId));
                 settings.set(String(userId), {
                   user_id: String(userId),
@@ -53,6 +54,7 @@ function makeEnv(overrides: Record<string, unknown> = {}) {
                   telegram_full_body: fullBody,
                   telegram_webhook_secret: prev?.telegram_webhook_secret ?? null,
                   telegram_refresh_at: prev?.telegram_refresh_at ?? null,
+                  language: language ?? prev?.language ?? 'en',
                 });
               }
               if (/ON CONFLICT \(user_id\) DO UPDATE SET telegram_webhook_secret/i.test(sql)) {
@@ -65,6 +67,7 @@ function makeEnv(overrides: Record<string, unknown> = {}) {
                   telegram_full_body: prev?.telegram_full_body ?? 0,
                   telegram_webhook_secret: String(secret),
                   telegram_refresh_at: prev?.telegram_refresh_at ?? null,
+                  language: prev?.language ?? 'en',
                 });
               }
               if (/UPDATE aliases/i.test(sql)) {
@@ -127,7 +130,7 @@ describe('GET /api/settings/telegram', () => {
       env
     );
     expect(await json(res)).toEqual({
-      enabled: false, chatIds: [], fullBody: false, hasToken: true, webhookRegistered: false,
+      enabled: false, chatIds: [], fullBody: false, hasToken: true, webhookRegistered: false, language: 'en',
     });
   });
 
@@ -144,14 +147,14 @@ describe('GET /api/settings/telegram', () => {
     const env = makeEnv();
     env.DB.settings.set(ADMIN, {
       user_id: ADMIN, telegram_enabled: 1, telegram_chat_ids: '["424242"]',
-      telegram_full_body: 1, telegram_webhook_secret: 'abc', telegram_refresh_at: 100,
+      telegram_full_body: 1, telegram_webhook_secret: 'abc', telegram_refresh_at: 100, language: 'id',
     });
     const res = await app.fetch(
       new Request('https://inbox.example.com/api/settings/telegram', { headers: { Cookie: await cookieFor(env) } }),
       env
     );
     expect(await json(res)).toEqual({
-      enabled: true, chatIds: ['424242'], fullBody: true, hasToken: true, webhookRegistered: true,
+      enabled: true, chatIds: ['424242'], fullBody: true, hasToken: true, webhookRegistered: true, language: 'id',
     });
   });
 });
@@ -203,6 +206,35 @@ describe('PATCH /api/settings/telegram', () => {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Cookie: cookie },
         body: JSON.stringify({ chatIds: ['not-a-number'] }),
+      }),
+      env
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('saves the language preference', async () => {
+    const env = makeEnv();
+    const cookie = await cookieFor(env);
+    const res = await app.fetch(
+      new Request('https://inbox.example.com/api/settings/telegram', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ language: 'id' }),
+      }),
+      env
+    );
+    expect((await json(res)).language).toBe('id');
+    expect(env.DB.settings.get(ADMIN)).toMatchObject({ language: 'id' });
+  });
+
+  it('rejects an unknown language', async () => {
+    const env = makeEnv();
+    const cookie = await cookieFor(env);
+    const res = await app.fetch(
+      new Request('https://inbox.example.com/api/settings/telegram', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ language: 'fr' }),
       }),
       env
     );

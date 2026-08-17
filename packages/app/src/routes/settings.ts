@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { AppContext } from '../types';
 import { TelegramSettings, UpdateTelegramSettingsInput } from '@mailriz/shared';
-import { sendTelegramMessage, parseChatIds, TelegramSettingsRow } from '../lib/telegram';
+import { sendTelegramMessage, parseChatIds, telegramLabels, TelegramSettingsRow } from '../lib/telegram';
 
 /**
  * Telegram notification settings. The bot token itself is a Worker secret
@@ -13,19 +13,20 @@ import { sendTelegramMessage, parseChatIds, TelegramSettingsRow } from '../lib/t
 export const settingsRoutes = new Hono<AppContext>();
 
 const SELECT_ROW =
-  'SELECT telegram_enabled, telegram_chat_ids, telegram_full_body, telegram_webhook_secret, telegram_refresh_at FROM settings WHERE user_id = ?1';
+  'SELECT telegram_enabled, telegram_chat_ids, telegram_full_body, telegram_webhook_secret, telegram_refresh_at, language FROM settings WHERE user_id = ?1';
 
 async function getTelegramSettingsRow(c: any): Promise<TelegramSettingsRow | null> {
   const row = await c.env.DB.prepare(SELECT_ROW).bind(c.get('user').email).first();
   return row as TelegramSettingsRow | null;
 }
 
-const UPSERT_ROW = `INSERT INTO settings (user_id, telegram_enabled, telegram_chat_ids, telegram_full_body)
-     VALUES (?1, ?2, ?3, ?4)
+const UPSERT_ROW = `INSERT INTO settings (user_id, telegram_enabled, telegram_chat_ids, telegram_full_body, language)
+     VALUES (?1, ?2, ?3, ?4, ?5)
      ON CONFLICT (user_id) DO UPDATE SET
        telegram_enabled = excluded.telegram_enabled,
        telegram_chat_ids = excluded.telegram_chat_ids,
-       telegram_full_body = excluded.telegram_full_body`;
+       telegram_full_body = excluded.telegram_full_body,
+       language = excluded.language`;
 
 async function telegramApi(env: any, method: string, params: Record<string, string>): Promise<any> {
   const token = env.TELEGRAM_BOT_TOKEN;
@@ -65,6 +66,7 @@ function toTelegramSettings(c: any, row: TelegramSettingsRow | null): TelegramSe
     fullBody: !!(row?.telegram_full_body),
     hasToken: !!c.env.TELEGRAM_BOT_TOKEN,
     webhookRegistered: !!row?.telegram_webhook_secret,
+    language: row?.language === 'id' ? 'id' : 'en',
   };
 }
 
@@ -81,13 +83,18 @@ settingsRoutes.patch('/telegram', async (c) => {
     }
   }
 
+  if (body.language !== undefined && body.language !== 'en' && body.language !== 'id') {
+    return c.json({ error: 'language must be en or id' }, 400);
+  }
+
   const row = await getTelegramSettingsRow(c);
   const enabled = body.enabled !== undefined ? (body.enabled ? 1 : 0) : (row?.telegram_enabled ?? 0);
   const chatIds = body.chatIds !== undefined ? JSON.stringify(body.chatIds) : (row?.telegram_chat_ids ?? null);
   const fullBody = body.fullBody !== undefined ? (body.fullBody ? 1 : 0) : (row?.telegram_full_body ?? 0);
+  const language = body.language !== undefined ? body.language : (row?.language ?? 'en');
 
   await c.env.DB.prepare(UPSERT_ROW)
-    .bind(c.get('user').email, enabled, chatIds, fullBody)
+    .bind(c.get('user').email, enabled, chatIds, fullBody, language)
     .run();
 
   return c.json({
@@ -96,6 +103,7 @@ settingsRoutes.patch('/telegram', async (c) => {
     fullBody: !!fullBody,
     hasToken: !!c.env.TELEGRAM_BOT_TOKEN,
     webhookRegistered: !!(row?.telegram_webhook_secret),
+    language: language === 'id' ? 'id' : 'en',
   });
 });
 
@@ -105,9 +113,10 @@ settingsRoutes.post('/telegram/test', async (c) => {
   if (chatIds.length === 0) {
     return c.json({ error: 'No chat ids configured' }, 400);
   }
+  const message = telegramLabels(row?.language).testMessage;
   const results = [];
   for (const chatId of chatIds) {
-    results.push(await sendTelegramMessage(c.env, chatId, '🔔 MailRiz test message — Telegram notifications are working.'));
+    results.push(await sendTelegramMessage(c.env, chatId, message));
   }
   const failed = results.filter((r) => !r.ok);
   if (failed.length > 0) {

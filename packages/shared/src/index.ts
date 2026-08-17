@@ -9,10 +9,15 @@ export const VAULT_DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-
 
 export type AuthMode = 'access' | 'session';
 
+/** UI language for the dashboard and Telegram notifications. */
+export type Language = 'en' | 'id';
+
 export interface MeResponse {
   email: string;
   mode: AuthMode;
   domain: string;
+  /** UI language, from the settings row; 'en' when unset. */
+  language: Language;
 }
 
 export interface Alias {
@@ -55,12 +60,15 @@ export interface TelegramSettings {
   hasToken: boolean;
   /** Whether the bot webhook is registered (drives /refresh). */
   webhookRegistered: boolean;
+  /** UI language for the dashboard and Telegram messages. */
+  language: Language;
 }
 
 export interface UpdateTelegramSettingsInput {
   enabled?: boolean;
   chatIds?: string[];
   fullBody?: boolean;
+  language?: Language;
 }
 
 export type EmailView = 'inbox' | 'starred' | 'archived' | 'trash';

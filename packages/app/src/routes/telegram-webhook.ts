@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { timingSafeEqualBytes } from '@mailriz/shared';
 import { AppContext } from '../types';
-import { parseChatIds } from '../lib/telegram';
+import { parseChatIds, telegramLabels } from '../lib/telegram';
 
 /**
  * Telegram bot webhook — the public callback the bot's /refresh command
@@ -18,7 +18,7 @@ export const telegramWebhookRoutes = new Hono<AppContext>();
 const REFRESH_RE = /^\/refresh(?:@[A-Za-z0-9_]+)?/;
 
 const SETTINGS_SELECT =
-  'SELECT telegram_webhook_secret, telegram_chat_ids FROM settings WHERE user_id = ?1';
+  'SELECT telegram_webhook_secret, telegram_chat_ids, language FROM settings WHERE user_id = ?1';
 
 telegramWebhookRoutes.post('/webhook', async (c) => {
   const env = c.env as any;
@@ -52,7 +52,7 @@ telegramWebhookRoutes.post('/webhook', async (c) => {
       await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text: '🔄 Memeriksa inbox…' }),
+        body: JSON.stringify({ chat_id: chatId, text: telegramLabels(row?.language).refreshing }),
       }).catch(() => {});
     }
   }
