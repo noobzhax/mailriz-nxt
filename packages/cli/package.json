@@ -1,9 +1,9 @@
 {
-  "name": "mailriz-cli",
+  "name": "mailriz-cli-nxt",
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "mailriz-cli": "./dist/cli.js"
+    "mailriz-cli": "dist/cli.js"
   },
   "scripts": {
     "build": "bun build ./src/cli.ts --outdir dist --target node --format esm --external wrangler",
@@ -17,7 +17,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/rizkirmdhnnn/mailriz.git"
+    "url": "git+https://github.com/noobzhax/mailriz-nxt.git"
   },
   "dependencies": {
     "wrangler": "^4"

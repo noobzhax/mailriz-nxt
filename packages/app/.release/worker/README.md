@@ -1,0 +1,1 @@
+This folder contains the built output assets for the worker "mailriz" generated at 2026-08-17T08:44:20.386Z.

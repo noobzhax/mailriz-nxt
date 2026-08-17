@@ -24,7 +24,7 @@ Stop handing your real address to every newsletter, forum, and signup form. With
 ## 🚀 Quick start
 
 ```bash
-bunx mailriz-cli@latest setup
+bunx mailriz-cli-nxt@latest setup
 ```
 
 One command deploys the entire stack to your Cloudflare account: Worker, database, storage, DNS, and email routing. No server to rent, nothing to maintain, no credit card for infrastructure.

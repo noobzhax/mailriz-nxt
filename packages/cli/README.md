@@ -1,10 +1,10 @@
-# mailriz-cli
+# mailriz-cli-nxt
 
-Deployment wizard for [MailRiz](https://github.com/rizkirmdhnnn/mailriz) — self-hosted,
+Deployment wizard for [MailRiz](https://github.com/noobzhax/mailriz-nxt) — self-hosted,
 persistent email aliases running entirely on Cloudflare.
 
 ```bash
-bunx mailriz-cli setup
+bunx mailriz-cli-nxt setup
 ```
 
 ## Commands
@@ -46,5 +46,7 @@ Config is written to `~/.mailriz/config.json` (mode 600).
 spawned as a child process to deploy. Everything else is bundled into the
 published `dist/cli.js`.
 
-See the [main README](https://github.com/rizkirmdhnnn/mailriz#readme) for
+See the [main README](https://github.com/noobzhax/mailriz-nxt#readme) for
 architecture, platform limits, and security notes.
+
+

@@ -51,7 +51,7 @@ const CONFIG_PATH = join(CONFIG_DIR, 'config.json');
 /** Worker, D1 database and bucket prefix are all fixed — one install per account. */
 const WORKER_NAME = 'mailriz';
 const TMP_DIR = join(CONFIG_DIR, '.temp');
-const RELEASE_URL = 'https://github.com/rizkirmdhnnn/mailriz/releases/latest/download/mailriz-worker.tar.gz';
+const RELEASE_URL = 'https://github.com/noobzhax/mailriz-nxt/releases/latest/download/mailriz-worker.tar.gz';
 
 interface Config {
   account_id: string;
