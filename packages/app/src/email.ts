@@ -3,7 +3,7 @@ import { ulid } from 'ulid';
 import { Env } from './types';
 import { makeSnippet, ALIAS_LOCAL_PART_RE } from '@mailriz/shared';
 import { stripActiveContent } from './lib/sanitize';
-import { shouldNotify, buildTelegramMessage, sendTelegramMessage, TelegramSettingsRow } from './lib/telegram';
+import { shouldNotify, buildTelegramMessage, sendTelegramMessage, parseChatIds, TelegramSettingsRow } from './lib/telegram';
 
 /**
  * Inbound email handler — called by Cloudflare Email Routing.
@@ -164,7 +164,7 @@ async function notifyTelegram(
 ): Promise<void> {
   try {
     const settings = await env.DB.prepare(
-      'SELECT telegram_enabled, telegram_chat_id, telegram_full_body FROM settings WHERE user_id = ?1'
+      'SELECT telegram_enabled, telegram_chat_ids, telegram_full_body FROM settings WHERE user_id = ?1'
     )
       .bind(env.ADMIN_EMAIL || '')
       .first<TelegramSettingsRow>();
@@ -183,8 +183,15 @@ async function notifyTelegram(
       dashboardHostname: env.DASHBOARD_HOSTNAME || '',
       emailId: mail.id,
     });
+    const buttonUrl = env.DASHBOARD_HOSTNAME
+      ? `https://${env.DASHBOARD_HOSTNAME}/inbox/${mail.id}`
+      : undefined;
 
-    await sendTelegramMessage(env, settings!.telegram_chat_id!, text);
+    // Every configured chat gets the message; one failing chat must not
+    // starve the others.
+    for (const chatId of parseChatIds(settings!.telegram_chat_ids)) {
+      await sendTelegramMessage(env, chatId, text, { buttonUrl });
+    }
   } catch (err) {
     console.error(`[telegram] notify failed: ${err instanceof Error ? err.message : String(err)}`);
   }

@@ -17,12 +17,14 @@ import { useEffect, useRef, useState } from 'react';
  * both session auth and Cloudflare Access without setting any header — which
  * EventSource could not do anyway.
  */
-export function useLiveMail(onMail: () => void): { connected: boolean } {
+export function useLiveMail(onMail: () => void, onRefresh?: () => void): { connected: boolean } {
   const [connected, setConnected] = useState(false);
 
   // Held in a ref so a changing callback doesn't tear down the connection.
   const handler = useRef(onMail);
   handler.current = onMail;
+  const refreshHandler = useRef(onRefresh);
+  refreshHandler.current = onRefresh;
 
   useEffect(() => {
     let source: EventSource | null = null;
@@ -40,6 +42,12 @@ export function useLiveMail(onMail: () => void): { connected: boolean } {
 
     source.addEventListener('mail', () => {
       if (!stopped) handler.current();
+    });
+
+    // /refresh from the Telegram bot — the server asks the dashboard to
+    // refetch immediately, same reload path as new mail.
+    source.addEventListener('refresh', () => {
+      if (!stopped) refreshHandler.current?.();
     });
 
     source.addEventListener('error', () => {

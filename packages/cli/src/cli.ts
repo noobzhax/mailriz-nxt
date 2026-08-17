@@ -30,7 +30,7 @@ import {
   listWorkerDomains, deleteWorkerDomain,
   enableEmailRouting, setCatchAllToWorker, getEmailRoutingSettings,
   getCatchAllRule, catchAllTargets, clearCatchAll, disableEmailRouting,
-  getAccessOrganization, createAccessApp, createAccessPolicy,
+  getAccessOrganization, createAccessApp, createAccessPolicy, createBypassAccessPolicy,
   listAccessApps, deleteAccessApp, findAccessApp,
 } from './cf';
 import {
@@ -50,6 +50,8 @@ const CONFIG_DIR = join(homedir(), '.mailriz');
 const CONFIG_PATH = join(CONFIG_DIR, 'config.json');
 /** Worker, D1 database and bucket prefix are all fixed — one install per account. */
 const WORKER_NAME = 'mailriz';
+/** Path-scoped Access application letting Telegram's servers reach the webhook. */
+const TELEGRAM_WEBHOOK_APP_NAME = 'mailriz telegram webhook';
 const TMP_DIR = join(CONFIG_DIR, '.temp');
 const RELEASE_URL = 'https://github.com/noobzhax/mailriz-nxt/releases/latest/download/mailriz-worker.tar.gz';
 
@@ -351,13 +353,39 @@ async function ensureAccessApp(
   hostname: string,
   adminEmail: string
 ): Promise<{ id: string; aud: string; reused: boolean }> {
-  const existing = findAccessApp(await listAccessApps(token, accountId), hostname);
+  // The Telegram webhook bypass app shares the hostname, so it must never
+  // be mistaken for the guarding app — filter it out of the match.
+  const all = await listAccessApps(token, accountId);
+  const existing = findAccessApp(all.filter((a) => a.name !== TELEGRAM_WEBHOOK_APP_NAME), hostname);
   if (existing?.id && existing.aud) {
     return { id: existing.id, aud: existing.aud, reused: true };
   }
   const app = await createAccessApp(token, accountId, 'mailriz', hostname);
   await createAccessPolicy(token, accountId, app.id, adminEmail);
   return { id: app.id, aud: app.aud, reused: false };
+}
+
+/**
+ * A path-scoped Access application covering only the Telegram webhook, with
+ * a Bypass → Everyone policy. Access matches the most specific application
+ * first, so Telegram's servers reach the webhook while the rest of the
+ * hostname stays behind the login. The Worker's own secret-token check is
+ * the real gate for that path.
+ */
+async function ensureTelegramWebhookApp(
+  token: string,
+  accountId: string,
+  hostname: string
+): Promise<void> {
+  const all = await listAccessApps(token, accountId);
+  const existing = all.find(
+    (a) => a.name === TELEGRAM_WEBHOOK_APP_NAME && (a.domain || '').replace(/\/+$/, '') === hostname
+  );
+  if (existing?.id) return;
+  const app = await createAccessApp(token, accountId, TELEGRAM_WEBHOOK_APP_NAME, hostname, {
+    paths: [{ path: '/api/telegram/webhook' }],
+  });
+  await createBypassAccessPolicy(token, accountId, app.id, 'telegram webhook bypass');
 }
 
 // ---------------------------------------------------------------- setup
@@ -769,6 +797,21 @@ async function cmdSetup() {
     }
   } else {
     tasks.skip('access', 'password auth');
+  }
+  // The webhook bypass app is nice-to-have: without it /refresh stays
+  // broken on Access installs, but auth itself is unaffected.
+  if (useAccess) {
+    try {
+      await ensureTelegramWebhookApp(effectiveToken, accountId, dashboardHostname);
+    } catch (e: any) {
+      tasks.warn('access', 'telegram webhook bypass not created', {
+        title: 'Telegram /refresh may not work',
+        body:
+          `${e.message}\n\nWithout the path-scoped Access application, Telegram's\n` +
+          `servers are stopped at the login. Re-run \`reconfigure\` later, or\n` +
+          `create the app by hand under Zero Trust → Access.`,
+      });
+    }
   }
 
   // Worker.
@@ -1324,6 +1367,21 @@ async function cmdReconfigure() {
     }
   } else {
     tasks.skip('access', 'password auth');
+  }
+  // Same nice-to-have as setup: without the bypass app, /refresh is stopped
+  // at the Access login on access-mode installs.
+  if (useAccess) {
+    try {
+      await ensureTelegramWebhookApp(token, cfg.account_id, cfg.dashboard_hostname);
+    } catch (e: any) {
+      tasks.warn('access', 'telegram webhook bypass not created', {
+        title: 'Telegram /refresh may not work',
+        body:
+          `${e.message}\n\nWithout the path-scoped Access application, Telegram's\n` +
+          `servers are stopped at the login. Re-run \`reconfigure\` later, or\n` +
+          `create the app by hand under Zero Trust → Access.`,
+      });
+    }
   }
 
   tasks.run('worker', 'redeploying…');

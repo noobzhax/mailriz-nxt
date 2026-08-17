@@ -376,7 +376,8 @@ export async function createAccessApp(
   token: string,
   accountId: string,
   name: string,
-  hostname: string
+  hostname: string,
+  opts: { paths?: { path: string }[] } = {}
 ): Promise<AccessApp> {
   const app = await cfFetch<AccessApp>(token, `/accounts/${accountId}/access/apps`, {
     method: 'POST',
@@ -385,6 +386,12 @@ export async function createAccessApp(
       domain: hostname,
       type: 'self_hosted',
       session_duration: '24h',
+      // A path-scoped application: Access matches the most specific app
+      // first, so this one answers for its path while the broader app keeps
+      // guarding the rest of the hostname.
+      ...(opts.paths
+        ? { paths: opts.paths.map((p) => ({ hostname, path: p.path })) }
+        : {}),
     }),
   });
   if (!app?.id) throw new Error('Access app was created but returned no id');
@@ -408,6 +415,27 @@ export async function createAccessPolicy(
       name: 'mailriz admin',
       decision: 'allow',
       include: [{ email: { email: adminEmail } }],
+    }),
+  });
+}
+
+/**
+ * Bypass policy for a path-scoped app. Used for the Telegram webhook path:
+ * Telegram's servers carry no session, so Access must let the request
+ * through — the Worker's own secret-token check is the real gate.
+ */
+export async function createBypassAccessPolicy(
+  token: string,
+  accountId: string,
+  appId: string,
+  name: string
+): Promise<unknown> {
+  return cfFetch(token, `/accounts/${accountId}/access/apps/${appId}/policies`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name,
+      decision: 'bypass',
+      include: [{ everyone: {} }],
     }),
   });
 }

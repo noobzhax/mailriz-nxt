@@ -48,15 +48,18 @@ export interface UpdateAliasInput {
 /** Telegram notification settings as the dashboard sees them. */
 export interface TelegramSettings {
   enabled: boolean;
-  chatId: string | null;
+  /** Every configured chat id; each receives every notification. */
+  chatIds: string[];
   fullBody: boolean;
   /** Whether a bot token secret is deployed — never the token itself. */
   hasToken: boolean;
+  /** Whether the bot webhook is registered (drives /refresh). */
+  webhookRegistered: boolean;
 }
 
 export interface UpdateTelegramSettingsInput {
   enabled?: boolean;
-  chatId?: string | null;
+  chatIds?: string[];
   fullBody?: boolean;
 }
 

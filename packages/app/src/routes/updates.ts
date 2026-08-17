@@ -51,6 +51,17 @@ async function newestCursor(env: Env): Promise<Cursor> {
 }
 
 /**
+ * The /refresh marker the Telegram webhook writes. 0 when never refreshed —
+ * a settings row is not guaranteed to exist at all.
+ */
+async function refreshMarker(env: Env): Promise<number> {
+  const row = await env.DB.prepare(
+    'SELECT telegram_refresh_at FROM settings WHERE user_id = ?1'
+  ).bind(env.ADMIN_EMAIL || '').first<{ telegram_refresh_at: number | null }>();
+  return row?.telegram_refresh_at ?? 0;
+}
+
+/**
  * Live notification of new mail.
  *
  * The Worker holding this stream is not the one that received the mail —
@@ -94,8 +105,13 @@ updatesRoutes.get('/stream', async (c) => {
       send(`retry: 2000\n\n`);
 
       let known: Cursor;
+      let knownRefresh: number;
       try {
         known = resumeFrom ?? (await newestCursor(env));
+        // The refresh marker is only ever forwarded while it advances *during*
+        // a connection. A refresh that happened while disconnected is covered
+        // by the mail cursor resume — new mail emits its own event anyway.
+        knownRefresh = await refreshMarker(env);
       } catch {
         close();
         return;
@@ -110,12 +126,19 @@ updatesRoutes.get('/stream', async (c) => {
           if (closed || signal?.aborted) break;
 
           let latest: Cursor;
+          let refreshedAt: number;
           try {
-            latest = await newestCursor(env);
+            [latest, refreshedAt] = await Promise.all([newestCursor(env), refreshMarker(env)]);
           } catch {
             // A transient database error shouldn't kill the stream; the next
             // poll will try again.
             continue;
+          }
+
+          if (refreshedAt > knownRefresh) {
+            knownRefresh = refreshedAt;
+            send(`id: refresh:${refreshedAt}\nevent: refresh\ndata: ${JSON.stringify({ ts: refreshedAt })}\n\n`);
+            lastPing = Date.now();
           }
 
           if (latest !== known) {

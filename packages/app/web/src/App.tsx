@@ -243,7 +243,7 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
 
   // New mail pushes an event; the list then reloads through the normal query,
   // which already carries the active folder, alias, label and search.
-  const live = useLiveMail(emails.refreshFromTop);
+  const live = useLiveMail(emails.refreshFromTop, emails.refreshFromTop);
 
   // The refresh button spins for at least this long, so the animation is
   // legible even when the fetch finishes in a few milliseconds.
@@ -324,7 +324,7 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
         onNewAlias={() => { setShowNewAlias(true); setNavOpen(false); }}
         onOpenSettings={openSettings}
         settings={settings}
-        telegramConfigured={!!(telegram.data?.hasToken && telegram.data?.enabled && telegram.data?.chatId)}
+        telegramConfigured={!!(telegram.data?.hasToken && telegram.data?.enabled && telegram.data?.chatIds.length)}
         onToggleMute={(a) => toggleMute.mutate(a)}
         me={me}
       />
@@ -1362,24 +1362,28 @@ function SettingsPane({ onBack }: { onBack: () => void }) {
   const qc = useQueryClient();
   const settings = useTelegramSettings();
 
-  const [chatId, setChatId] = useState('');
+  const [chatIdsText, setChatIdsText] = useState('');
   useEffect(() => {
-    if (settings.data) setChatId(settings.data.chatId || '');
+    if (settings.data) setChatIdsText(settings.data.chatIds.join(', '));
   }, [settings.data]);
 
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   const save = useMutation({
-    mutationFn: (body: { enabled?: boolean; chatId?: string | null; fullBody?: boolean }) =>
+    mutationFn: (body: { enabled?: boolean; chatIds?: string[]; fullBody?: boolean }) =>
       api.patch<TelegramSettings>('/api/settings/telegram', body),
     onSuccess: (saved) => {
       qc.invalidateQueries({ queryKey: ['telegram-settings'] });
-      setChatId(saved.chatId || '');
+      setChatIdsText(saved.chatIds.join(', '));
       setNotice({ kind: 'ok', text: 'Saved' });
       setTimeout(() => setNotice(null), 2000);
     },
     onError: (e: Error) => setNotice({ kind: 'error', text: e.message }),
   });
+
+  /** Split the comma input into trimmed, non-empty chat ids. */
+  const parseChatIds = (raw: string): string[] =>
+    raw.split(',').map((s) => s.trim()).filter(Boolean);
 
   const test = useMutation({
     mutationFn: () => api.post<{ ok: boolean }>('/api/settings/telegram/test'),
@@ -1387,8 +1391,23 @@ function SettingsPane({ onBack }: { onBack: () => void }) {
     onError: (e: Error) => setNotice({ kind: 'error', text: e.message }),
   });
 
+  const webhook = useQuery<{ registered: boolean; url: string | null }>({
+    queryKey: ['telegram-webhook'],
+    queryFn: () => api.get('/api/settings/telegram/webhook'),
+  });
+  const registerWebhook = useMutation({
+    mutationFn: () => api.post<{ ok: boolean }>('/api/settings/telegram/webhook'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['telegram-webhook'] });
+      qc.invalidateQueries({ queryKey: ['telegram-settings'] });
+      setNotice({ kind: 'ok', text: 'Webhook terdaftar — coba kirim /refresh ke bot di Telegram' });
+      setTimeout(() => setNotice(null), 3000);
+    },
+    onError: (e: Error) => setNotice({ kind: 'error', text: e.message }),
+  });
+
   const s = settings.data;
-  const canSend = !!(s?.hasToken && s?.chatId);
+  const canSend = !!(s?.hasToken && s?.chatIds.length > 0);
 
   const field =
     'w-full rounded-control border border-border bg-surface-2 px-3 py-2 text-[14px] text-text ' +
@@ -1440,23 +1459,23 @@ function SettingsPane({ onBack }: { onBack: () => void }) {
 
             <div className="border-t border-border py-3">
               <label className="text-[14px] font-semibold" htmlFor="tg-chat-id">
-                Chat id
+                Chat ids
               </label>
               <p className="mt-0.5 mb-2 text-[12.5px] text-text-dim">
-                Your private chat with the bot. Message it once (e.g. /start), then find the id with{' '}
+                Chats the bot writes to, comma-separated. Message the bot once from each chat
+                (e.g. /start), then find the ids with{' '}
                 <span className="font-semibold text-text">@userinfobot</span>.
               </p>
               <div className="flex gap-2">
                 <input
                   id="tg-chat-id"
-                  value={chatId}
-                  onChange={(e) => setChatId(e.target.value)}
-                  placeholder="123456789"
-                  inputMode="numeric"
+                  value={chatIdsText}
+                  onChange={(e) => setChatIdsText(e.target.value)}
+                  placeholder="123456789, -1001234567890"
                   className={field}
                 />
                 <button
-                  onClick={() => save.mutate({ chatId: chatId.trim() || null })}
+                  onClick={() => save.mutate({ chatIds: parseChatIds(chatIdsText) })}
                   disabled={save.isPending}
                   className="shrink-0 rounded-control bg-accent px-4 text-[13.5px] font-semibold text-accent-ink transition hover:bg-accent-strong disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                 >
@@ -1476,6 +1495,33 @@ function SettingsPane({ onBack }: { onBack: () => void }) {
             </div>
 
             <div className="border-t border-border py-4">
+              <div className="mb-2">
+                <div className="text-[14px] font-semibold">Bot commands</div>
+                <p className="mt-0.5 text-[12.5px] text-text-dim">
+                  Registers the webhook so <code className="rounded bg-surface-3 px-1.5 py-0.5 text-[12px]">/refresh</code>{' '}
+                  works: send it to the bot and this dashboard refetches immediately.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => registerWebhook.mutate()}
+                  disabled={registerWebhook.isPending || !s.hasToken}
+                  className="flex items-center gap-2 rounded-control border border-border bg-surface-2 px-4 py-2 text-[13.5px] font-semibold text-text transition hover:bg-surface-3 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                >
+                  <RefreshCw size={14} /> {registerWebhook.isPending ? 'Registering…' : webhook.data?.registered ? 'Re-register webhook' : 'Register webhook'}
+                </button>
+                {webhook.data?.registered && (
+                  <span className="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-600">
+                    <Check size={13} /> aktif
+                  </span>
+                )}
+              </div>
+              <p className="mt-1.5 text-[11.5px] text-text-faint">
+                {!s.hasToken ? 'Needs a bot token deployed.' : webhook.data?.registered ? 'Webhook aktif — /refresh siap dipakai.' : 'Belum terdaftar.'}
+              </p>
+            </div>
+
+            <div className="border-t border-border py-4">
               <button
                 onClick={() => test.mutate()}
                 disabled={test.isPending || !canSend}
@@ -1484,7 +1530,7 @@ function SettingsPane({ onBack }: { onBack: () => void }) {
                 <Send size={14} /> {test.isPending ? 'Sending…' : 'Send test message'}
               </button>
               <p className="mt-1.5 text-[11.5px] text-text-faint">
-                {canSend ? 'Delivers to the chat id above.' : 'Needs a bot token and a chat id.'}
+                {canSend ? 'Delivers to every chat id above.' : 'Needs a bot token and at least one chat id.'}
               </p>
             </div>
 

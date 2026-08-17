@@ -21,10 +21,12 @@ interface Row {
 
 /**
  * Serves a scripted sequence of "newest message" rows, one per poll, so a
- * test can make mail arrive at a chosen moment.
+ * test can make mail arrive at a chosen moment. `refreshSequence` does the
+ * same for the Telegram /refresh marker.
  */
-function makeEnv(sequence: (Row | null)[]) {
+function makeEnv(sequence: (Row | null)[], refreshSequence: number[] = [0]) {
   let polls = 0;
+  let refreshPolls = 0;
   return {
     get polls() {
       return polls;
@@ -47,6 +49,11 @@ function makeEnv(sequence: (Row | null)[]) {
               const row = sequence[Math.min(polls, sequence.length - 1)] ?? null;
               polls++;
               return row as T;
+            }
+            if (/FROM settings/i.test(sql)) {
+              const v = refreshSequence[Math.min(refreshPolls, refreshSequence.length - 1)] ?? 0;
+              refreshPolls++;
+              return { telegram_refresh_at: v } as T;
             }
             return null as T;
           },
@@ -186,6 +193,23 @@ describe('resuming after a reconnect', () => {
     const res = await open(env, await cookieFor(env), '200_b');
 
     expect(await readAll(res)).not.toContain('event: mail');
+  });
+});
+
+describe('telegram /refresh marker', () => {
+  it('emits a refresh event when the marker advances', async () => {
+    const env = makeEnv([null], [0, 100]);
+    const res = await open(env, await cookieFor(env));
+    const text = await readAll(res);
+    expect(text).toContain('event: refresh');
+    expect(text).toContain('id: refresh:100');
+  });
+
+  it('stays quiet while the marker is unchanged', async () => {
+    const env = makeEnv([null], [0, 0]);
+    const res = await open(env, await cookieFor(env));
+    const text = await readAll(res);
+    expect(text).not.toContain('event: refresh');
   });
 });
 

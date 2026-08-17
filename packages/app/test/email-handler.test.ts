@@ -173,7 +173,7 @@ describe('emailHandler telegram notification', () => {
 
   beforeEach(() => {
     d1 = makeD1Mock();
-    d1.settingsRow = { telegram_enabled: 1, telegram_chat_id: '424242', telegram_full_body: 0 };
+    d1.settingsRow = { telegram_enabled: 1, telegram_chat_ids: '["424242"]', telegram_full_body: 0 };
     env = {
       DB: d1,
       RAW_BUCKET: makeR2Mock(),
@@ -231,6 +231,13 @@ describe('emailHandler telegram notification', () => {
     } finally {
       aliases[0]!.telegram_muted = 0;
     }
+  });
+
+  it('delivers to every configured chat', async () => {
+    d1.settingsRow = { telegram_enabled: 1, telegram_chat_ids: '["424242","-100789"]', telegram_full_body: 0 };
+    await deliver();
+    expect(telegramCalls).toHaveLength(2);
+    expect(telegramCalls[0]).toContain('/bottok:secret/sendMessage');
   });
 
   it('stays silent when no settings row exists', async () => {

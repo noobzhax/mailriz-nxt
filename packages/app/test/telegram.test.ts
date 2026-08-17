@@ -1,5 +1,7 @@
 import { describe, it, expect, afterEach } from 'bun:test';
-import { shouldNotify, buildTelegramMessage, sendTelegramMessage } from '../src/lib/telegram';
+import {
+  shouldNotify, buildTelegramMessage, sendTelegramMessage, parseChatIds, escapeHtml,
+} from '../src/lib/telegram';
 
 const realFetch = globalThis.fetch;
 
@@ -7,7 +9,22 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-const ENABLED = { telegram_enabled: 1, telegram_chat_id: '123456', telegram_full_body: 0 };
+const ENABLED = { telegram_enabled: 1, telegram_chat_ids: '["123456","-100789"]', telegram_full_body: 0 };
+
+describe('parseChatIds', () => {
+  it('reads a JSON array of chat ids', () => {
+    expect(parseChatIds('["123456","-100789"]')).toEqual(['123456', '-100789']);
+  });
+
+  it('returns [] for null or garbage', () => {
+    expect(parseChatIds(null)).toEqual([]);
+    expect(parseChatIds('not json')).toEqual([]);
+  });
+
+  it('drops non-numeric entries', () => {
+    expect(parseChatIds('["123456","nope","abc"]')).toEqual(['123456']);
+  });
+});
 
 describe('shouldNotify', () => {
   it('is silent while the feature is disabled', () => {
@@ -15,7 +32,8 @@ describe('shouldNotify', () => {
   });
 
   it('is silent when no chat id is configured', () => {
-    expect(shouldNotify({ ...ENABLED, telegram_chat_id: null }, { telegram_muted: 0 })).toBe(false);
+    expect(shouldNotify({ ...ENABLED, telegram_chat_ids: null }, { telegram_muted: 0 })).toBe(false);
+    expect(shouldNotify({ ...ENABLED, telegram_chat_ids: '[]' }, { telegram_muted: 0 })).toBe(false);
   });
 
   it('is silent for a muted alias', () => {
@@ -27,63 +45,85 @@ describe('shouldNotify', () => {
   });
 });
 
+describe('escapeHtml', () => {
+  it('escapes the characters Telegram HTML treats as markup', () => {
+    expect(escapeHtml('<b>a&b</b> "q"')).toBe('&lt;b&gt;a&amp;b&lt;/b&gt; "q"');
+  });
+});
+
 describe('buildTelegramMessage', () => {
   const base = {
-    fromName: 'Jane Doe',
+    fromName: 'Jane <Doe>',
     fromAddress: 'jane@example.com',
     localPart: 'newsletter',
     domain: 'rizpedia.com',
-    subject: 'Hello from Jane',
-    snippet: 'This is the snippet text.',
-    bodyText: 'The full body text that should not appear by default.',
+    subject: 'Hello & welcome',
+    snippet: 'This is the snippet.',
+    bodyText: 'Full body with <script>alert(1)</script>',
     fullBody: false,
     dashboardHostname: 'inbox.rizpedia.com',
     emailId: '01ABC',
   };
 
-  it('shows sender, alias, subject, snippet, and a deep link', () => {
+  it('builds HTML markup with bold sender and subject, escaped content', () => {
     const msg = buildTelegramMessage(base);
-    expect(msg).toContain('📬 Jane Doe <jane@example.com>');
-    expect(msg).toContain('newsletter@rizpedia.com');
-    expect(msg).toContain('Hello from Jane');
-    expect(msg).toContain('This is the snippet text.');
-    expect(msg).toContain('https://inbox.rizpedia.com/inbox/01ABC');
-    expect(msg).not.toContain('The full body text');
+    expect(msg).toContain('<b>Jane &lt;Doe&gt;</b>');
+    expect(msg).toContain('<code>newsletter@rizpedia.com</code>');
+    expect(msg).toContain('<b>Hello &amp; welcome</b>');
+    expect(msg).toContain('This is the snippet.');
+    // The deep link moved to the button; the text must not carry a raw URL.
+    expect(msg).not.toContain('https://');
   });
 
-  it('falls back to the bare address when the sender has no name', () => {
-    const msg = buildTelegramMessage({ ...base, fromName: '' });
-    expect(msg).toContain('📬 jane@example.com');
-    expect(msg).not.toContain('<jane@example.com>');
-  });
-
-  it('includes the full body when asked', () => {
+  it('escapes the full body when included', () => {
     const msg = buildTelegramMessage({ ...base, fullBody: true });
-    expect(msg).toContain('The full body text that should not appear by default.');
+    expect(msg).toContain('&lt;script&gt;');
+    expect(msg).not.toContain('<script>alert');
   });
 
   it('caps the message at the Telegram limit', () => {
     const msg = buildTelegramMessage({ ...base, fullBody: true, bodyText: 'x'.repeat(5000) });
     expect(msg.length).toBeLessThanOrEqual(4096);
   });
+
+  it('omits the subject line when there is none', () => {
+    const msg = buildTelegramMessage({ ...base, subject: '' });
+    expect(msg).not.toContain('Subject:');
+  });
 });
 
 describe('sendTelegramMessage', () => {
   const env = { TELEGRAM_BOT_TOKEN: 'tok:secret' } as any;
 
-  it('posts to the bot API and reports success', async () => {
+  it('posts HTML text with an open-in-dashboard button and reports success', async () => {
     let called = false;
     globalThis.fetch = (async (input: any, init: any) => {
       called = true;
       expect(String(input)).toBe('https://api.telegram.org/bottok:secret/sendMessage');
       const body = JSON.parse(init.body);
       expect(body.chat_id).toBe('123456');
-      expect(body.text).toContain('Hello');
+      expect(body.text).toContain('<b>Hello</b>');
+      expect(body.parse_mode).toBe('HTML');
+      expect(body.reply_markup.inline_keyboard[0][0].text).toBe('Buka di Dashboard');
+      expect(body.reply_markup.inline_keyboard[0][0].url).toBe('https://inbox.rizpedia.com/inbox/01ABC');
       return new Response(JSON.stringify({ ok: true }));
     }) as any;
 
-    expect(await sendTelegramMessage(env, '123456', 'Hello')).toEqual({ ok: true });
+    const ok = await sendTelegramMessage(env, '123456', '<b>Hello</b>', {
+      buttonUrl: 'https://inbox.rizpedia.com/inbox/01ABC',
+    });
+    expect(ok).toEqual({ ok: true });
     expect(called).toBe(true);
+  });
+
+  it('sends plain text without markup when no button is given', async () => {
+    globalThis.fetch = (async (_input: any, init: any) => {
+      const body = JSON.parse(init.body);
+      expect(body.parse_mode).toBeUndefined();
+      expect(body.reply_markup).toBeUndefined();
+      return new Response(JSON.stringify({ ok: true }));
+    }) as any;
+    expect(await sendTelegramMessage(env, '123456', 'plain')).toEqual({ ok: true });
   });
 
   it('reports failure with Telegram\'s own error text', async () => {

@@ -3,7 +3,8 @@ import { app } from '../src/api';
 
 /**
  * Telegram settings API: GET/PATCH /api/settings/telegram, the test-message
- * endpoint, and the per-alias mute on PATCH /api/aliases/:id.
+ * endpoint, webhook registration, and the per-alias mute on
+ * PATCH /api/aliases/:id.
  */
 
 const ADMIN = 'owner@example.com';
@@ -12,8 +13,10 @@ import { TEST_PASSWORD_HASH, TEST_SIGNING_KEY } from './session-credentials';
 interface SettingsRow {
   user_id: string;
   telegram_enabled: number;
-  telegram_chat_id: string | null;
+  telegram_chat_ids: string | null;
   telegram_full_body: number;
+  telegram_webhook_secret: string | null;
+  telegram_refresh_at: number | null;
 }
 
 /** In-memory D1: one settings row + a small alias table. */
@@ -30,7 +33,9 @@ function makeEnv(overrides: Record<string, unknown> = {}) {
             async first<T>() {
               if (/FROM settings/i.test(sql)) {
                 const row = settings.get(String(args[0]));
-                return row ? { telegram_enabled: row.telegram_enabled, telegram_chat_id: row.telegram_chat_id, telegram_full_body: row.telegram_full_body } as T : null;
+                if (!row) return null as T;
+                const { user_id: _u, ...rest } = row;
+                return rest as T;
               }
               if (/FROM aliases WHERE id/i.test(sql)) {
                 return (aliases.find((a) => a.id === args[0]) ?? null) as T;
@@ -39,8 +44,28 @@ function makeEnv(overrides: Record<string, unknown> = {}) {
             },
             async run() {
               if (/INSERT INTO settings/i.test(sql)) {
-                const [userId, enabled, chatId, fullBody] = args;
-                settings.set(String(userId), { user_id: String(userId), telegram_enabled: enabled, telegram_chat_id: chatId, telegram_full_body: fullBody });
+                const [userId, enabled, chatIds, fullBody] = args;
+                const prev = settings.get(String(userId));
+                settings.set(String(userId), {
+                  user_id: String(userId),
+                  telegram_enabled: enabled,
+                  telegram_chat_ids: chatIds,
+                  telegram_full_body: fullBody,
+                  telegram_webhook_secret: prev?.telegram_webhook_secret ?? null,
+                  telegram_refresh_at: prev?.telegram_refresh_at ?? null,
+                });
+              }
+              if (/ON CONFLICT \(user_id\) DO UPDATE SET telegram_webhook_secret/i.test(sql)) {
+                const [userId, secret] = args;
+                const prev = settings.get(String(userId));
+                settings.set(String(userId), {
+                  user_id: String(userId),
+                  telegram_enabled: prev?.telegram_enabled ?? 0,
+                  telegram_chat_ids: prev?.telegram_chat_ids ?? null,
+                  telegram_full_body: prev?.telegram_full_body ?? 0,
+                  telegram_webhook_secret: String(secret),
+                  telegram_refresh_at: prev?.telegram_refresh_at ?? null,
+                });
               }
               if (/UPDATE aliases/i.test(sql)) {
                 const target = aliases.find((a) => a.id === args[args.length - 2]);
@@ -67,6 +92,7 @@ function makeEnv(overrides: Record<string, unknown> = {}) {
     SESSION_PASSWORD_HASH: TEST_PASSWORD_HASH,
     SESSION_SIGNING_KEY: TEST_SIGNING_KEY,
     TELEGRAM_BOT_TOKEN: 'tok:secret',
+    DASHBOARD_HOSTNAME: 'inbox.example.com',
     ...overrides,
   } as any;
 }
@@ -84,14 +110,8 @@ async function cookieFor(env: any): Promise<string> {
   return (res.headers.get('Set-Cookie') || '').split(';')[0]!;
 }
 
-function api(env: any, path: string, cookie: string, init: RequestInit = {}) {
-  return app.fetch(
-    new Request(`https://inbox.example.com${path}`, {
-      ...init,
-      headers: { ...(init.headers || {}), Cookie: cookie },
-    }),
-    env
-  );
+function json(res: Response): Promise<any> {
+  return res.json() as Promise<any>;
 }
 
 describe('GET /api/settings/telegram', () => {
@@ -106,7 +126,9 @@ describe('GET /api/settings/telegram', () => {
       new Request('https://inbox.example.com/api/settings/telegram', { headers: { Cookie: await cookieFor(env) } }),
       env
     );
-    expect(await (res.json() as Promise<any>)).toEqual({ enabled: false, chatId: null, fullBody: false, hasToken: true });
+    expect(await json(res)).toEqual({
+      enabled: false, chatIds: [], fullBody: false, hasToken: true, webhookRegistered: false,
+    });
   });
 
   it('reports hasToken false when no bot token secret is deployed', async () => {
@@ -115,17 +137,22 @@ describe('GET /api/settings/telegram', () => {
       new Request('https://inbox.example.com/api/settings/telegram', { headers: { Cookie: await cookieFor(env) } }),
       env
     );
-    expect((await (res.json() as Promise<any>)).hasToken).toBe(false);
+    expect((await json(res)).hasToken).toBe(false);
   });
 
   it('reflects a saved row', async () => {
     const env = makeEnv();
-    env.DB.settings.set(ADMIN, { user_id: ADMIN, telegram_enabled: 1, telegram_chat_id: '424242', telegram_full_body: 1 });
+    env.DB.settings.set(ADMIN, {
+      user_id: ADMIN, telegram_enabled: 1, telegram_chat_ids: '["424242"]',
+      telegram_full_body: 1, telegram_webhook_secret: 'abc', telegram_refresh_at: 100,
+    });
     const res = await app.fetch(
       new Request('https://inbox.example.com/api/settings/telegram', { headers: { Cookie: await cookieFor(env) } }),
       env
     );
-    expect(await (res.json() as Promise<any>)).toEqual({ enabled: true, chatId: '424242', fullBody: true, hasToken: true });
+    expect(await json(res)).toEqual({
+      enabled: true, chatIds: ['424242'], fullBody: true, hasToken: true, webhookRegistered: true,
+    });
   });
 });
 
@@ -137,30 +164,35 @@ describe('PATCH /api/settings/telegram', () => {
       new Request('https://inbox.example.com/api/settings/telegram', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Cookie: cookie },
-        body: JSON.stringify({ enabled: true, chatId: '424242', fullBody: false }),
+        body: JSON.stringify({ enabled: true, chatIds: ['424242', '-100789'], fullBody: false }),
       }),
       env
     );
     expect(res.status).toBe(200);
-    expect(await (res.json() as Promise<any>)).toEqual({ enabled: true, chatId: '424242', fullBody: false, hasToken: true });
+    const body = await json(res);
+    expect(body.chatIds).toEqual(['424242', '-100789']);
 
     const saved = env.DB.settings.get(ADMIN);
-    expect(saved).toMatchObject({ telegram_enabled: 1, telegram_chat_id: '424242', telegram_full_body: 0 });
+    expect(saved).toMatchObject({ telegram_enabled: 1, telegram_full_body: 0 });
+    expect(JSON.parse(saved!.telegram_chat_ids!)).toEqual(['424242', '-100789']);
   });
 
-  it('can clear the chat id', async () => {
+  it('can clear the chat ids', async () => {
     const env = makeEnv();
-    env.DB.settings.set(ADMIN, { user_id: ADMIN, telegram_enabled: 1, telegram_chat_id: '424242', telegram_full_body: 0 });
+    env.DB.settings.set(ADMIN, {
+      user_id: ADMIN, telegram_enabled: 1, telegram_chat_ids: '["424242"]',
+      telegram_full_body: 0, telegram_webhook_secret: null, telegram_refresh_at: null,
+    });
     const cookie = await cookieFor(env);
     const res = await app.fetch(
       new Request('https://inbox.example.com/api/settings/telegram', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Cookie: cookie },
-        body: JSON.stringify({ chatId: '' }),
+        body: JSON.stringify({ chatIds: [] }),
       }),
       env
     );
-    expect((await (res.json() as Promise<any>)).chatId).toBeNull();
+    expect((await json(res)).chatIds).toEqual([]);
   });
 
   it('rejects a chat id that is not a number', async () => {
@@ -170,7 +202,7 @@ describe('PATCH /api/settings/telegram', () => {
       new Request('https://inbox.example.com/api/settings/telegram', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Cookie: cookie },
-        body: JSON.stringify({ chatId: 'not-a-number' }),
+        body: JSON.stringify({ chatIds: ['not-a-number'] }),
       }),
       env
     );
@@ -182,14 +214,15 @@ describe('POST /api/settings/telegram/test', () => {
   const realFetch = globalThis.fetch;
   afterEach(() => { globalThis.fetch = realFetch; });
 
-  it('sends a test message to the configured chat', async () => {
+  it('sends a test message to every configured chat', async () => {
     const env = makeEnv();
-    env.DB.settings.set(ADMIN, { user_id: ADMIN, telegram_enabled: 1, telegram_chat_id: '424242', telegram_full_body: 0 });
-    let called = false;
-    globalThis.fetch = (async (input: any, init: any) => {
-      called = true;
-      expect(String(input)).toContain('/bottok:secret/sendMessage');
-      expect(JSON.parse(init.body).chat_id).toBe('424242');
+    env.DB.settings.set(ADMIN, {
+      user_id: ADMIN, telegram_enabled: 1, telegram_chat_ids: '["424242","-100789"]',
+      telegram_full_body: 0, telegram_webhook_secret: null, telegram_refresh_at: null,
+    });
+    const chats: string[] = [];
+    globalThis.fetch = (async (_input: any, init: any) => {
+      chats.push(JSON.parse(init.body).chat_id);
       return new Response(JSON.stringify({ ok: true }));
     }) as any;
 
@@ -202,10 +235,10 @@ describe('POST /api/settings/telegram/test', () => {
       env
     );
     expect(res.status).toBe(200);
-    expect(called).toBe(true);
+    expect(chats).toEqual(['424242', '-100789']);
   });
 
-  it('answers 400 when no chat id is configured', async () => {
+  it('answers 400 when no chat ids are configured', async () => {
     const env = makeEnv();
     const cookie = await cookieFor(env);
     const res = await app.fetch(
@@ -217,22 +250,105 @@ describe('POST /api/settings/telegram/test', () => {
     );
     expect(res.status).toBe(400);
   });
+});
 
-  it('answers 502 when Telegram rejects the message', async () => {
+describe('POST /api/settings/telegram/webhook', () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => { globalThis.fetch = realFetch; });
+
+  it('registers the webhook with a freshly minted secret', async () => {
     const env = makeEnv();
-    env.DB.settings.set(ADMIN, { user_id: ADMIN, telegram_enabled: 1, telegram_chat_id: '999', telegram_full_body: 0 });
-    globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ ok: false, description: 'chat not found' }), { status: 400 })) as any;
+    const calls: string[] = [];
+    globalThis.fetch = (async (input: any) => {
+      calls.push(String(input));
+      return new Response(JSON.stringify({ ok: true, result: {} }));
+    }) as any;
 
     const cookie = await cookieFor(env);
     const res = await app.fetch(
-      new Request('https://inbox.example.com/api/settings/telegram/test', {
+      new Request('https://inbox.example.com/api/settings/telegram/webhook', {
+        method: 'POST',
+        headers: { Cookie: cookie },
+      }),
+      env
+    );
+    expect(res.status).toBe(200);
+    // setWebhook (with secret) + setMyCommands
+    expect(calls[0]).toContain('/setWebhook?');
+    expect(calls[0]).toContain('url=https%3A%2F%2Finbox.example.com%2Fapi%2Ftelegram%2Fwebhook');
+    expect(calls[0]).toContain('secret_token=');
+    expect(calls[1]).toContain('/setMyCommands?');
+
+    const saved = env.DB.settings.get(ADMIN);
+    expect(saved!.telegram_webhook_secret).toBeTruthy();
+  });
+
+  it('reuses the stored secret on a second registration', async () => {
+    const env = makeEnv();
+    env.DB.settings.set(ADMIN, {
+      user_id: ADMIN, telegram_enabled: 0, telegram_chat_ids: null,
+      telegram_full_body: 0, telegram_webhook_secret: 'stored-secret', telegram_refresh_at: null,
+    });
+    const calls: string[] = [];
+    globalThis.fetch = (async (input: any) => {
+      calls.push(String(input));
+      return new Response(JSON.stringify({ ok: true, result: {} }));
+    }) as any;
+
+    const cookie = await cookieFor(env);
+    const res = await app.fetch(
+      new Request('https://inbox.example.com/api/settings/telegram/webhook', {
+        method: 'POST',
+        headers: { Cookie: cookie },
+      }),
+      env
+    );
+    expect(res.status).toBe(200);
+    expect(calls[0]).toContain('secret_token=stored-secret');
+    expect(env.DB.settings.get(ADMIN)!.telegram_webhook_secret).toBe('stored-secret');
+  });
+
+  it('answers 502 when Telegram rejects setWebhook', async () => {
+    const env = makeEnv();
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ ok: false, description: 'bad request' }), { status: 400 })) as any;
+
+    const cookie = await cookieFor(env);
+    const res = await app.fetch(
+      new Request('https://inbox.example.com/api/settings/telegram/webhook', {
         method: 'POST',
         headers: { Cookie: cookie },
       }),
       env
     );
     expect(res.status).toBe(502);
+  });
+});
+
+describe('GET /api/settings/telegram/webhook', () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => { globalThis.fetch = realFetch; });
+
+  it('reports registration state from the stored secret and Telegram', async () => {
+    const env = makeEnv();
+    env.DB.settings.set(ADMIN, {
+      user_id: ADMIN, telegram_enabled: 0, telegram_chat_ids: null,
+      telegram_full_body: 0, telegram_webhook_secret: 'abc', telegram_refresh_at: null,
+    });
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ ok: true, result: { url: 'https://inbox.example.com/api/telegram/webhook' } }))) as any;
+
+    const cookie = await cookieFor(env);
+    const res = await app.fetch(
+      new Request('https://inbox.example.com/api/settings/telegram/webhook', {
+        headers: { Cookie: cookie },
+      }),
+      env
+    );
+    expect(await json(res)).toEqual({
+      registered: true,
+      url: 'https://inbox.example.com/api/telegram/webhook',
+    });
   });
 });
 

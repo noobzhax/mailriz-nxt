@@ -44,6 +44,24 @@ describe('telegram prompt', () => {
   });
 });
 
+describe('telegram webhook access bypass', () => {
+  const cfSrc = readFileSync(join(import.meta.dir, '../src/cf.ts'), 'utf8');
+
+  it('creates a path-scoped Access application for the webhook path', () => {
+    expect(src).toContain("paths: [{ path: '/api/telegram/webhook' }]");
+  });
+
+  it('gives it a Bypass → Everyone policy', () => {
+    expect(cfSrc).toContain("decision: 'bypass'");
+    expect(cfSrc).toContain('everyone');
+  });
+
+  it('never mistakes the bypass app for the guarding app', () => {
+    expect(src).toContain('TELEGRAM_WEBHOOK_APP_NAME');
+    expect(src).toContain('a.name !== TELEGRAM_WEBHOOK_APP_NAME');
+  });
+});
+
 describe('telegram in status and config', () => {
   it('reports whether a token is stored without printing it', () => {
     expect(src).toMatch(/\['telegram',\s*cfg\.telegram_bot_token/);

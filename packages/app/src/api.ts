@@ -5,6 +5,7 @@ import { emailRoutes } from './routes/emails';
 import { labelRoutes } from './routes/labels';
 import { meRoutes } from './routes/me';
 import { settingsRoutes } from './routes/settings';
+import { telegramWebhookRoutes } from './routes/telegram-webhook';
 import { updatesRoutes } from './routes/updates';
 import { authRoutes } from './routes/auth';
 import { jwtAuth } from './middleware/auth';
@@ -17,6 +18,11 @@ export const app = new Hono<AppContext>();
 // in registration order, and this one answers before jwtAuth is reached.
 // Keep it above the guard below.
 app.route('/api', authRoutes);
+
+// The Telegram bot webhook is called by Telegram's servers, which carry no
+// session — it authenticates with the secret token from setWebhook. It must
+// sit above the guard like authRoutes.
+app.route('/api/telegram', telegramWebhookRoutes);
 
 app.use('/api/*', jwtAuth);
 
