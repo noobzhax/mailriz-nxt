@@ -95,3 +95,49 @@ Shared:
 - Forwarding attachments into Telegram.
 - Multiple chat ids / per-user routing (single-user service).
 - Retry queue or delivery guarantees.
+
+---
+
+## Follow-up — multiple chats and message design (2026-08-17)
+
+Decisions reached in the architecture grilling. The original single-chat design
+is extended, not replaced.
+
+### Multiple chat ids
+
+- **Storage**: the settings row's `telegram_chat_id` column becomes
+  `telegram_chat_ids` — a JSON array of strings. New migration `0005`.
+- **Migration**: add the new column, copy the old value into
+  `json_array(telegram_chat_id)` when present, drop the old column.
+- **Input**: the dashboard settings page accepts chat ids **comma-separated**
+  (trimmed, empties dropped). The `@userinfobot` hint stays.
+- **Semantics**: every chat receives every email — per-chat alias filtering
+  is explicitly out of scope. The per-alias mute stays global (mutes all
+  chats).
+- **Sending**: notify loops over all ids. A failure for one chat (wrong id,
+  bot blocked) is logged and the remaining chats still receive the message.
+- **Test button**: sends the test message to every configured chat.
+- **ShouldNotify**: requires enabled + at least one chat id + unmuted alias.
+
+### Message design
+
+- **parse mode**: `HTML` (Telegram's HTML entities format).
+- **Format**:
+  ```
+  📬 <b>From Name</b> &lt;from@address&gt;
+  alias: <code>local@domain</code>
+  Subject: <b>subject</b>
+
+  snippet
+
+  [ Buka di Dashboard ]  ← inline keyboard button (URL → /inbox/{emailId})
+  ```
+- **Escaping**: all user content (sender name, subject, snippet, full body)
+  is HTML-escaped before interpolation — parse mode HTML is strict and
+  unescaped `<`/`&` breaks the message.
+- **Button**: `InlineKeyboardMarkup` with a single URL button
+  ("Buka di Dashboard"), pointing at `https://{dashboard}/inbox/{emailId}`.
+- **Full body** option unchanged (escaped, still capped at 4096 including
+  markup).
+- **Quick actions from Telegram (mark read / archive via button)** — out of
+  scope; would require a webhook endpoint and a verified callback secret.
