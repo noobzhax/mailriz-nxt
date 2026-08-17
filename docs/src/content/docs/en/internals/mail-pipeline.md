@@ -59,7 +59,7 @@ so search never needs a separate write path that could drift.
 ## 6. You see it
 
 If the dashboard is open, an SSE connection notices within about four seconds
-and the list reloads. See [Live updates](/mailriz/en/guides/organising/#mail-arrives-on-its-own).
+and the list reloads. See [Live updates](/mailriz-nxt/en/guides/organising/#mail-arrives-on-its-own).
 
 ## Size limits
 
@@ -69,3 +69,4 @@ rejected before reaching the Worker; that limit is Cloudflare's, not MailRiz's.
 On **Workers Free**, the 10 ms CPU budget per request can be exceeded while
 parsing a large HTML message, which makes inbound delivery fail intermittently.
 This is the main reason Workers Paid is recommended.
+

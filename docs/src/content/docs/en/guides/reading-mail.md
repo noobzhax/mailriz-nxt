@@ -51,7 +51,7 @@ what you want for forwarding a report or checking a signature.
 
 The body is served in a sandboxed frame under a strict Content-Security-Policy
 that denies scripts entirely — so rendering a message as-sent does not mean
-running whatever it contains. [Security](/mailriz/en/internals/security/) has
+running whatever it contains. [Security](/mailriz-nxt/en/internals/security/) has
 the detail.
 
 ## The message keeps its own background
@@ -68,3 +68,4 @@ background](../../../../assets/screenshots/dark-mode.jpg)
 Messages with no HTML part render as text. Where a message has both, the HTML
 is shown — they are two renderings of the same thing, and displaying both would
 print it twice.
+

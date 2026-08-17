@@ -64,7 +64,7 @@ The small dot on the refresh button shows the state of that connection:
 
 A brief grey moment every few minutes is normal: connections are deliberately
 short-lived and the browser reconnects. Persistent grey means live updates are
-not working — see [Troubleshooting](/mailriz/en/operations/troubleshooting/).
+not working — see [Troubleshooting](/mailriz-nxt/en/operations/troubleshooting/).
 
 New mail sorts to the top, so it appears there. If you had pressed **Load
 more**, an arrival returns the list to the first page.
@@ -73,3 +73,4 @@ more**, an arrival returns the list to the first page.
 
 Colour-coded and listed in the sidebar. Selecting one scopes the mailbox to it,
 exactly like selecting an alias, and the folder rail keeps working inside it.
+

@@ -7,7 +7,7 @@ One command deploys the whole stack — Worker, database, storage, DNS, and mail
 routing — to your own Cloudflare account.
 
 ```sh
-bunx mailriz-cli@latest setup
+bunx mailriz-cli-nxt@latest setup
 ```
 
 ## Before you start
@@ -17,7 +17,7 @@ You need:
 - **A Cloudflare account** with a domain already added as a zone. Mail arrives
   on that domain, so it has to be one you control.
 - **A Cloudflare API token.** The wizard opens the right page and tells you
-  which scopes to tick — see [Cloudflare token](/mailriz/en/getting-started/cloudflare-token/)
+  which scopes to tick — see [Cloudflare token](/mailriz-nxt/en/getting-started/cloudflare-token/)
   if you want to prepare it first.
 - **Bun** ≥ 1.1, or Node ≥ 18 if you run the CLI with `npx` instead.
 
@@ -29,7 +29,7 @@ You need:
 4. **Configuration** — the dashboard hostname (default `inbox.yourdomain.com`)
    and your admin email address.
 5. **Auth** — Cloudflare Access if your token allows it, otherwise a password
-   you set here. See [Authentication](/mailriz/en/internals/auth/).
+   you set here. See [Authentication](/mailriz-nxt/en/internals/auth/).
 6. **Provisioning**, shown as a live task list:
 
    | Task | What it creates |
@@ -73,4 +73,5 @@ echo "hi" | mail -s "test" anything@yourdomain.com
 
 It should appear in the inbox within a few seconds, without a refresh.
 
-If nothing arrives, see [Troubleshooting](/mailriz/en/operations/troubleshooting/).
+If nothing arrives, see [Troubleshooting](/mailriz-nxt/en/operations/troubleshooting/).
+

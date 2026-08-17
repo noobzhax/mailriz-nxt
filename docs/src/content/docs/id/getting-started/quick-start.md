@@ -7,7 +7,7 @@ Satu perintah men-deploy seluruh tumpukan — Worker, database, penyimpanan, DNS
 dan perutean email — ke akun Cloudflare Anda sendiri.
 
 ```sh
-bunx mailriz-cli@latest setup
+bunx mailriz-cli-nxt@latest setup
 ```
 
 ## Sebelum mulai
@@ -18,7 +18,7 @@ Anda perlu:
   akan tiba di domain itu, jadi harus domain yang Anda kendalikan.
 - **API token Cloudflare.** Wizard akan membuka halaman yang tepat dan
   menyebutkan scope mana yang harus dicentang — lihat
-  [Token Cloudflare](/mailriz/id/getting-started/cloudflare-token/) kalau ingin
+  [Token Cloudflare](/mailriz-nxt/id/getting-started/cloudflare-token/) kalau ingin
   menyiapkannya lebih dulu.
 - **Bun** ≥ 1.1, atau Node ≥ 18 kalau CLI dijalankan lewat `npx`.
 
@@ -31,7 +31,7 @@ Anda perlu:
    alamat email admin Anda.
 5. **Autentikasi** — Cloudflare Access kalau token Anda mengizinkan, kalau tidak
    sebuah password yang Anda tentukan di sini. Lihat
-   [Autentikasi](/mailriz/en/internals/auth/).
+   [Autentikasi](/mailriz-nxt/en/internals/auth/).
 6. **Provisioning**, ditampilkan sebagai daftar tugas langsung:
 
    | Tugas | Yang dibuat |
@@ -77,4 +77,5 @@ echo "hai" | mail -s "tes" apasaja@domainanda.com
 Email seharusnya muncul di kotak masuk dalam beberapa detik, tanpa refresh.
 
 Kalau tidak ada yang masuk, lihat
-[Pemecahan masalah](/mailriz/en/operations/troubleshooting/).
+[Pemecahan masalah](/mailriz-nxt/en/operations/troubleshooting/).
+

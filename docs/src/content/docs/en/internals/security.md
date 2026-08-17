@@ -86,4 +86,5 @@ caught in someone else's burst is delayed rather than lost.
   receives what Cloudflare accepts.
 - **Access JWTs are signature-verified** by the Worker against the team
   domain's JWKS, plus audience, issuer, and expiry. See
-  [Authentication](/mailriz/en/internals/auth/#access-jwt-verification).
+  [Authentication](/mailriz-nxt/en/internals/auth/#access-jwt-verification).
+

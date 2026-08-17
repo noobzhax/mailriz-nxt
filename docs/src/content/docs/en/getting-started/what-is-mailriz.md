@@ -62,9 +62,10 @@ per database, R2 gives 10 GB with no egress charge.
 The one caveat worth knowing before you start: on the **Workers Free** plan,
 each request gets 10 ms of CPU, and parsing a large HTML email can exceed that.
 Inbound mail can fail intermittently as a result. **Workers Paid ($5/mo) is
-recommended** for reliable delivery. See [Platform limits](/mailriz/en/reference/limits/).
+recommended** for reliable delivery. See [Platform limits](/mailriz-nxt/en/reference/limits/).
 
 ## Next
 
-[Quick start](/mailriz/en/getting-started/quick-start/) — one command, about
+[Quick start](/mailriz-nxt/en/getting-started/quick-start/) — one command, about
 five minutes.
+

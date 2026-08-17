@@ -6,14 +6,14 @@
 
 **A persistent email alias service on your own domain — one inbox for every address, yours forever.**
 
-[**📖 Documentation**](https://rizkirmdhnnn.github.io/mailriz/) · [Quick start][quickstart] · [How it works][internals]
+[**📖 Documentation**](https://noobzhax.github.io/mailriz-nxt/) · [Quick start][quickstart] · [How it works][internals]
 
 <!-- A GIF, not <video>: GitHub will not render a player from a repo path, and
      an animated image is the only thing that plays inline here. The full-
      resolution MP4, with pause and scrub, is on the docs site. -->
 <img src=".github/assets/mailriz-intro.gif" alt="MailRiz in 30 seconds: the problem, the inbox, one-command setup" width="720">
 
-*[Watch it in full quality on the docs site →](https://rizkirmdhnnn.github.io/mailriz/)*
+*[Watch it in full quality on the docs site →](https://noobzhax.github.io/mailriz-nxt/)*
 
 </div>
 
@@ -111,9 +111,10 @@ MIT — use it, fork it, learn from it.
 
 ---
 
-[quickstart]: https://rizkirmdhnnn.github.io/mailriz/en/getting-started/quick-start/
-[token]: https://rizkirmdhnnn.github.io/mailriz/en/getting-started/cloudflare-token/
-[limits]: https://rizkirmdhnnn.github.io/mailriz/en/reference/limits/
-[cli]: https://rizkirmdhnnn.github.io/mailriz/en/reference/cli/
-[config]: https://rizkirmdhnnn.github.io/mailriz/en/reference/configuration/
-[internals]: https://rizkirmdhnnn.github.io/mailriz/en/internals/architecture/
+[quickstart]: https://noobzhax.github.io/mailriz-nxt/en/getting-started/quick-start/
+[token]: https://noobzhax.github.io/mailriz-nxt/en/getting-started/cloudflare-token/
+[limits]: https://noobzhax.github.io/mailriz-nxt/en/reference/limits/
+[cli]: https://noobzhax.github.io/mailriz-nxt/en/reference/cli/
+[config]: https://noobzhax.github.io/mailriz-nxt/en/reference/configuration/
+[internals]: https://noobzhax.github.io/mailriz-nxt/en/internals/architecture/
+

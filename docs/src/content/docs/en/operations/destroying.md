@@ -119,5 +119,6 @@ through — and because destroy removes the D1 database and the buckets rather
 than leaving them to be reused, it really does start empty.
 
 If you only want to change the auth mode, the admin email, or repair a broken
-Access application, use [`reconfigure`](/mailriz/en/reference/cli/#reconfigure)
+Access application, use [`reconfigure`](/mailriz-nxt/en/reference/cli/#reconfigure)
 instead. It keeps your mail.
+

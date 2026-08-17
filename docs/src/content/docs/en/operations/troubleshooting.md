@@ -40,7 +40,7 @@ Then check, in order:
 An older CLI replayed every migration on each run. Update the CLI itself:
 
 ```sh
-bunx mailriz-cli@latest update
+bunx mailriz-cli-nxt@latest update
 ```
 
 Newer versions record applied migrations and adopt what is already present.
@@ -90,3 +90,4 @@ npx wrangler tail --name mailriz
 ```
 
 Shows live Worker output, including the email handler.
+

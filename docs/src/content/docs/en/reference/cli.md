@@ -4,7 +4,7 @@ description: Every mailriz-cli command, what it changes, and what it leaves alon
 ---
 
 ```sh
-bunx mailriz-cli@latest <command>
+bunx mailriz-cli-nxt@latest <command>
 ```
 
 Running it with no command starts `setup`. An unrecognised command prints the
@@ -52,7 +52,7 @@ redeploys, then repairs alias domains. **D1 and R2 data are untouched.**
 
 Refuses to run on an access-mode installation with no recorded audience tag,
 because redeploying would lock the dashboard out. Run `reconfigure` instead.
-See [Updating](/mailriz/en/operations/updating/).
+See [Updating](/mailriz-nxt/en/operations/updating/).
 
 ## `reconfigure`
 
@@ -83,7 +83,7 @@ in that case keeps `~/.mailriz/config.json`, so the leftovers stay findable and
 the command can be run again.
 
 Requires typing the dashboard hostname to confirm. See
-[Removing MailRiz](/mailriz/en/operations/destroying/).
+[Removing MailRiz](/mailriz-nxt/en/operations/destroying/).
 
 ## `help`
 
@@ -117,3 +117,4 @@ forget where the deployment is — and because `setup` now refuses to run over a
 existing installation, that leaves the Worker, database and buckets with
 nothing pointing at them. Keep it, or delete the deployment with `destroy`
 first.
+

@@ -42,7 +42,7 @@ so that fallback can never swallow an API call.
 
 Message bodies would bloat a 500 MB database quickly and are never queried,
 only fetched by key. Keeping them in R2 leaves D1 small and fast, and R2 has no
-egress charge. [Storage](/mailriz/en/internals/storage/) has the detail.
+egress charge. [Storage](/mailriz-nxt/en/internals/storage/) has the detail.
 
 ## Where state lives
 
@@ -64,3 +64,4 @@ being pushed in memory.
 
 A cron trigger runs daily and purges trashed mail older than the retention
 window (30 days by default).
+

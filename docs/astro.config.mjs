@@ -10,12 +10,12 @@ export default defineConfig({
   // No images to optimise here, so skip sharp entirely — it is a large
   // native dependency this site would never use.
   image: { service: passthroughImageService() },
-  site: 'https://rizkirmdhnnn.github.io',
-  base: '/mailriz',
+  site: 'https://noobzhax.github.io',
+  base: '/mailriz-nxt',
   // Every page lives under a locale prefix, so the bare root would 404.
   // Send it to the default locale. The target needs `base` spelled out —
   // Astro applies base to the key but writes the value through verbatim.
-  redirects: { '/': '/mailriz/en/' },
+  redirects: { '/': '/mailriz-nxt/en/' },
   integrations: [
     starlight({
       title: 'MailRiz',
@@ -36,24 +36,24 @@ export default defineConfig({
         {
           tag: 'link',
           attrs: { rel: 'icon', type: 'image/png', sizes: '32x32',
-                   href: '/mailriz/mailriz-favicon-32.png' },
+                   href: '/mailriz-nxt/mailriz-favicon-32.png' },
         },
         {
           tag: 'link',
           attrs: { rel: 'icon', type: 'image/png', sizes: '16x16',
-                   href: '/mailriz/mailriz-favicon-16.png' },
+                   href: '/mailriz-nxt/mailriz-favicon-16.png' },
         },
         {
           tag: 'link',
           attrs: { rel: 'apple-touch-icon', sizes: '180x180',
-                   href: '/mailriz/mailriz-icon-180.png' },
+                   href: '/mailriz-nxt/mailriz-icon-180.png' },
         },
       ],
       social: [
         {
           icon: 'github',
           label: 'GitHub',
-          href: 'https://github.com/rizkirmdhnnn/mailriz',
+          href: 'https://github.com/noobzhax/mailriz-nxt',
         },
       ],
       // English is the source of truth; Indonesian pages that do not exist yet
@@ -81,6 +81,7 @@ export default defineConfig({
             { slug: 'guides/aliases' },
             { slug: 'guides/reading-mail' },
             { slug: 'guides/organising' },
+            { slug: 'guides/telegram-notifications' },
           ],
         },
         {
@@ -116,3 +117,4 @@ export default defineConfig({
     }),
   ],
 });
+

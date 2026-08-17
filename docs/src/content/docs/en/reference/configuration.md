@@ -45,7 +45,19 @@ These two are **secrets**, not variables — they are set with
 
 Both are required in session mode. If either is missing, or the hash is not in
 that format, the Worker answers 500 on every request rather than falling back
-to something weaker. See [Authentication](/mailriz/en/internals/auth/).
+to something weaker. See [Authentication](/mailriz-nxt/en/internals/auth/).
+
+### Telegram secret
+
+| Secret | Meaning |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | the bot token from `@BotFather`, used to send new-mail notifications |
+
+Also a secret, set by `mailriz-cli setup`, `update` and `reconfigure` through
+`wrangler secret bulk` — never a plain variable. An **empty** value is the
+"off" signal: skipping the prompt in the wizard clears a previously deployed
+token. Without it the dashboard still shows the settings, but nothing is ever
+sent. See [Telegram notifications](/mailriz-nxt/en/guides/telegram-notifications/).
 
 ### Bindings for auth
 
@@ -104,3 +116,4 @@ The generated Wrangler config sets two options that matter:
 - `run_worker_first: ["/api/*"]` — so that fallback can never answer an API
   call. Without it, a navigation request to an API path (an iframe loading a
   message body, for instance) receives the dashboard shell instead.
+
