@@ -31,7 +31,7 @@ Anda perlu:
    alamat email admin Anda.
 5. **Autentikasi** — Cloudflare Access kalau token Anda mengizinkan, kalau tidak
    sebuah password yang Anda tentukan di sini. Lihat
-   [Autentikasi](/mailriz-nxt/en/internals/auth/).
+   [Autentikasi](/mailriz-nxt/id/internals/auth/).
 6. **Provisioning**, ditampilkan sebagai daftar tugas langsung:
 
    | Tugas | Yang dibuat |
@@ -77,5 +77,6 @@ echo "hai" | mail -s "tes" apasaja@domainanda.com
 Email seharusnya muncul di kotak masuk dalam beberapa detik, tanpa refresh.
 
 Kalau tidak ada yang masuk, lihat
-[Pemecahan masalah](/mailriz-nxt/en/operations/troubleshooting/).
+[Pemecahan masalah](/mailriz-nxt/id/operations/troubleshooting/).
+
 

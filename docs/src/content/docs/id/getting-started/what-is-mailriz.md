@@ -55,10 +55,11 @@ Satu hal yang perlu diketahui sebelum mulai: pada paket **Workers Free**, setiap
 request hanya mendapat 10 ms CPU, dan mengurai email HTML berukuran besar bisa
 melewatinya. Akibatnya email masuk bisa gagal sesekali. **Workers Paid ($5/bln)
 disarankan** agar pengiriman andal. Lihat
-[Batas platform](/mailriz-nxt/en/reference/limits/).
+[Batas platform](/mailriz-nxt/id/reference/limits/).
 
 ## Selanjutnya
 
 [Mulai cepat](/mailriz-nxt/id/getting-started/quick-start/) — satu perintah, sekitar
 lima menit.
+
 
