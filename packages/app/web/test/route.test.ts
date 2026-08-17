@@ -94,6 +94,31 @@ describe('buildPath', () => {
   });
 });
 
+describe('settings route', () => {
+  it('parses /settings into the settings screen', () => {
+    expect(parseRoute('/settings')).toMatchObject({ view: 'settings', emailId: null });
+  });
+
+  it('builds /settings from the settings view', () => {
+    expect(buildPath({ ...DEFAULT_ROUTE, view: 'settings' })).toBe('/settings');
+  });
+
+  it('round-trips', () => {
+    const route = parseRoute('/settings');
+    expect(parseRoute(buildPath(route))).toEqual(route);
+  });
+
+  it('only matches settings at the root, not inside a scope', () => {
+    // An unknown third segment under an alias stays the open-message slot,
+    // matching how /alias/:id/:emailId already works.
+    expect(parseRoute('/alias/a1/settings')).toMatchObject({ aliasId: 'a1', emailId: 'settings' });
+  });
+
+  it('is off by default', () => {
+    expect(DEFAULT_ROUTE.view).toBe('inbox');
+  });
+});
+
 describe('toView', () => {
   it('stays inside the alias — the reported bug', () => {
     const inAlias = { ...DEFAULT_ROUTE, aliasId: 'a1' };

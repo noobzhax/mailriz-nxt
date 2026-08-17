@@ -7,11 +7,11 @@ import {
 import clsx from 'clsx';
 import {
   Alias, EmailSummary, EmailDetail, EmailListResponse,
-  EmailView, Label, MeResponse, CreateAliasInput,
+  EmailView, Label, MeResponse, CreateAliasInput, TelegramSettings,
 } from '@mailriz/shared';
 import { api, ApiError } from './lib/api';
 import { useRoute } from './lib/useRoute';
-import { toScope, toView } from './lib/route';
+import { toScope, toView, DEFAULT_ROUTE } from './lib/route';
 import { Tooltip } from './lib/Tooltip';
 import { Logo } from './lib/Logo';
 import { Resizer } from './lib/Resizer';
@@ -22,6 +22,7 @@ import {
   Inbox, Star, Archive, Trash2, Tag, Plus, Search, Mail, MailOpen,
   RefreshCw, Paperclip, X, Check, FileText, ChevronLeft, Menu,
   Sun, Moon, AlertTriangle, LogOut, PanelLeftClose, PanelLeftOpen,
+  Settings, Bell, BellOff, Send, ChevronRight,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------- helpers
@@ -60,6 +61,14 @@ function useAliases() {
 
 function useLabels() {
   return useQuery<Label[]>({ queryKey: ['labels'], queryFn: () => api.get('/api/labels') });
+}
+
+/** Telegram notification settings — the Dashboard and the SettingsPane both read it. */
+function useTelegramSettings() {
+  return useQuery<TelegramSettings>({
+    queryKey: ['telegram-settings'],
+    queryFn: () => api.get('/api/settings/telegram'),
+  });
 }
 
 function useEmails(view: EmailView, aliasId: string | null, labelId: string | null, q: string) {
@@ -204,7 +213,11 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
   // The URL holds what's on screen, so a reload or the back button lands where
   // you were instead of resetting to the inbox.
   const { route, navigate } = useRoute();
-  const { view, aliasId, labelId, q, emailId: selectedId } = route;
+  const { aliasId, labelId, q, emailId: selectedId } = route;
+  // The settings screen is a full-screen view of its own; everything mailbox
+  // shaped below runs against the inbox default.
+  const settings = route.view === 'settings';
+  const view: EmailView = route.view === 'settings' ? 'inbox' : route.view;
 
   const [showNewAlias, setShowNewAlias] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
@@ -217,6 +230,16 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
   const aliases = useAliases();
   const labels = useLabels();
   const emails = useEmails(view, aliasId, labelId, q);
+
+  // Telegram notification settings — also decides whether per-alias mute
+  // buttons show in the sidebar at all.
+  const telegram = useTelegramSettings();
+  const qc = useQueryClient();
+  const toggleMute = useMutation({
+    mutationFn: (alias: Alias) =>
+      api.patch<Alias>(`/api/aliases/${alias.id}`, { telegram_muted: alias.telegram_muted ? 0 : 1 }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['aliases'] }),
+  });
 
   // New mail pushes an event; the list then reloads through the normal query,
   // which already carries the active folder, alias, label and search.
@@ -238,7 +261,7 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
     : activeLabel
       ? activeLabel.name
       : null;
-  const scope = mailbox ? `${mailbox} · ${folder}` : folder;
+  const scope = settings ? 'Settings' : (mailbox ? `${mailbox} · ${folder}` : folder);
 
   /** Switch mailbox — all mail, an alias, or a label. */
   const goScope = (patch: { aliasId?: string | null; labelId?: string | null }) => {
@@ -250,6 +273,11 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
   const goView = (v: EmailView) => navigate(toView(route, v));
 
   const openEmail = (id: string | null) => navigate({ ...route, emailId: id });
+
+  const openSettings = () => {
+    navigate({ ...DEFAULT_ROUTE, view: 'settings' });
+    setNavOpen(false);
+  };
 
   /**
    * Access owns its own cookie, so there is nothing server-side of ours to
@@ -294,6 +322,10 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
         onPickAlias={(id) => goScope({ aliasId: id })}
         onPickLabel={(id) => goScope({ labelId: id })}
         onNewAlias={() => { setShowNewAlias(true); setNavOpen(false); }}
+        onOpenSettings={openSettings}
+        settings={settings}
+        telegramConfigured={!!(telegram.data?.hasToken && telegram.data?.enabled && telegram.data?.chatId)}
+        onToggleMute={(a) => toggleMute.mutate(a)}
         me={me}
       />
 
@@ -328,6 +360,9 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
         />
 
         <main className="flex min-h-0 flex-1 flex-col gap-5 p-4 sm:p-6">
+          {settings ? (
+            <SettingsPane onBack={() => navigate(DEFAULT_ROUTE)} />
+          ) : (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-card border border-border bg-surface shadow-[var(--shadow)] lg:flex-row">
             <FolderRail
               view={view}
@@ -382,6 +417,7 @@ function Dashboard({ me, theme }: { me?: MeResponse; theme: Theme }) {
               )}
             </div>
           </div>
+          )}
         </main>
       </div>
 
@@ -542,6 +578,11 @@ function Sidebar(props: {
   onPickAlias: (id: string) => void;
   onPickLabel: (id: string) => void;
   onNewAlias: () => void;
+  onOpenSettings: () => void;
+  settings: boolean;
+  /** Telegram is live: global on + chat id set, so per-alias mutes matter. */
+  telegramConfigured: boolean;
+  onToggleMute: (alias: Alias) => void;
   me?: MeResponse;
 }) {
   const navItem =
@@ -639,20 +680,35 @@ function Sidebar(props: {
                 )}
               >
                 <span className="truncate">@{a.local_part}</span>
-                {!a.is_enabled ? (
-                  <span className="shrink-0 rounded-pill bg-surface-3 px-2 py-0.5 text-[11px] font-semibold text-text-faint">
-                    off
-                  </span>
-                ) : a.is_auto ? (
-                  /* Created by the catch-all on first delivery, not by hand —
-                     worth marking so an unfamiliar address is explicable. */
-                  <span
-                    title="Created automatically when mail first arrived"
-                    className="shrink-0 rounded-pill bg-surface-3 px-2 py-0.5 text-[11px] font-semibold text-text-faint"
-                  >
-                    auto
-                  </span>
-                ) : null}
+                <span className="flex shrink-0 items-center gap-1">
+                  {!a.is_enabled ? (
+                    <span className="shrink-0 rounded-pill bg-surface-3 px-2 py-0.5 text-[11px] font-semibold text-text-faint">
+                      off
+                    </span>
+                  ) : a.is_auto ? (
+                    /* Created by the catch-all on first delivery, not by hand —
+                       worth marking so an unfamiliar address is explicable. */
+                    <span
+                      title="Created automatically when mail first arrived"
+                      className="shrink-0 rounded-pill bg-surface-3 px-2 py-0.5 text-[11px] font-semibold text-text-faint"
+                    >
+                      auto
+                    </span>
+                  ) : null}
+                  {props.telegramConfigured && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        props.onToggleMute(a);
+                      }}
+                      title={a.telegram_muted ? 'Unmute Telegram notifications' : 'Mute Telegram notifications'}
+                      aria-label={a.telegram_muted ? 'Unmute' : 'Mute'}
+                      className="grid size-6 shrink-0 place-items-center rounded-[8px] text-text-faint transition hover:bg-surface-3 hover:text-text"
+                    >
+                      {a.telegram_muted ? <BellOff size={13} /> : <Bell size={13} />}
+                    </button>
+                  )}
+                </span>
               </button>
             ))}
           </>
@@ -660,6 +716,20 @@ function Sidebar(props: {
       </nav>
 
       <div className="border-t border-border p-3">
+        <button
+          onClick={props.onOpenSettings}
+          className={clsx(
+            navItem,
+            'mb-1',
+            props.settings
+              ? 'bg-nav-surface font-semibold text-accent-strong'
+              : 'text-text-dim hover:bg-surface-2 hover:text-text'
+          )}
+        >
+          <Settings size={16} className="shrink-0" />
+          <span className="truncate">Settings</span>
+          {props.settings && <ChevronRight size={14} className="ml-auto shrink-0 opacity-60" />}
+        </button>
         <div className="flex w-full items-center gap-3 rounded-[12px] p-1.5">
           <div className="grid size-9 shrink-0 place-items-center rounded-full bg-surface-3 text-[12px] font-bold text-text-dim">
             {props.me ? initials(props.me.email) : '·'}
@@ -1244,3 +1314,196 @@ function NewAliasModal({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
+
+// ---------------------------------------------------------------- settings
+
+/** A binary option row: label, description, and a switch on the right. */
+function SwitchRow(props: {
+  label: string;
+  description: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3">
+      <div className="min-w-0">
+        <div className="text-[14px] font-semibold">{props.label}</div>
+        <div className="mt-0.5 text-[12.5px] text-text-dim">{props.description}</div>
+      </div>
+      <button
+        role="switch"
+        aria-checked={props.checked}
+        disabled={props.disabled}
+        onClick={() => props.onChange(!props.checked)}
+        className={clsx(
+          'relative h-[26px] w-[46px] shrink-0 rounded-full transition disabled:opacity-40',
+          props.checked ? 'bg-accent' : 'bg-surface-3',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40'
+        )}
+      >
+        <span
+          className={clsx(
+            'absolute top-[3px] size-5 rounded-full bg-white shadow transition-all',
+            props.checked ? 'left-[23px]' : 'left-[3px]'
+          )}
+        />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Telegram notifications settings. The bot token itself is deployed by the
+ * CLI (setup/reconfigure); this screen only sees whether it exists, plus the
+ * chat id and the toggles stored in D1.
+ */
+function SettingsPane({ onBack }: { onBack: () => void }) {
+  const qc = useQueryClient();
+  const settings = useTelegramSettings();
+
+  const [chatId, setChatId] = useState('');
+  useEffect(() => {
+    if (settings.data) setChatId(settings.data.chatId || '');
+  }, [settings.data]);
+
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+
+  const save = useMutation({
+    mutationFn: (body: { enabled?: boolean; chatId?: string | null; fullBody?: boolean }) =>
+      api.patch<TelegramSettings>('/api/settings/telegram', body),
+    onSuccess: (saved) => {
+      qc.invalidateQueries({ queryKey: ['telegram-settings'] });
+      setChatId(saved.chatId || '');
+      setNotice({ kind: 'ok', text: 'Saved' });
+      setTimeout(() => setNotice(null), 2000);
+    },
+    onError: (e: Error) => setNotice({ kind: 'error', text: e.message }),
+  });
+
+  const test = useMutation({
+    mutationFn: () => api.post<{ ok: boolean }>('/api/settings/telegram/test'),
+    onSuccess: () => setNotice({ kind: 'ok', text: 'Test message sent — check Telegram' }),
+    onError: (e: Error) => setNotice({ kind: 'error', text: e.message }),
+  });
+
+  const s = settings.data;
+  const canSend = !!(s?.hasToken && s?.chatId);
+
+  const field =
+    'w-full rounded-control border border-border bg-surface-2 px-3 py-2 text-[14px] text-text ' +
+    'placeholder:text-text-faint transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40';
+
+  return (
+    <div className="mx-auto flex min-h-0 w-full max-w-[720px] flex-col overflow-hidden rounded-card border border-border bg-surface shadow-[var(--shadow)]">
+      <div className="flex items-center gap-3 border-b border-border px-5 py-4">
+        <Tooltip label="Back to inbox" side="bottom">
+          <button
+            onClick={onBack}
+            aria-label="Back"
+            className="grid size-9 shrink-0 place-items-center rounded-[10px] text-text-dim transition hover:bg-surface-2 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          >
+            <ChevronLeft size={18} />
+          </button>
+        </Tooltip>
+        <div>
+          <h2 className="text-[17px] font-bold tracking-tight">Settings</h2>
+          <p className="text-[12px] text-text-faint">Telegram notifications</p>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {!s ? (
+          <div className="py-10 text-center text-[13.5px] text-text-dim">
+            {settings.isLoading ? 'Loading…' : 'Could not load settings'}
+          </div>
+        ) : (
+          <div>
+            {!s.hasToken && (
+              <div className="mb-4 flex items-start gap-2.5 rounded-control border border-border bg-surface-2 px-3.5 py-3 text-[13px] text-text-dim">
+                <AlertTriangle size={16} className="mt-0.5 shrink-0 text-text-faint" />
+                <span>
+                  No bot token deployed. Create a bot with{' '}
+                  <span className="font-semibold text-text">@BotFather</span>, then run{' '}
+                  <code className="rounded bg-surface-3 px-1.5 py-0.5 text-[12px]">mailriz-cli reconfigure</code>{' '}
+                  and paste the token there.
+                </span>
+              </div>
+            )}
+
+            <SwitchRow
+              label="Receive new-mail notifications"
+              description="A Telegram message for every incoming email, with a link to open it here."
+              checked={!!s.enabled}
+              onChange={(v) => save.mutate({ enabled: v })}
+            />
+
+            <div className="border-t border-border py-3">
+              <label className="text-[14px] font-semibold" htmlFor="tg-chat-id">
+                Chat id
+              </label>
+              <p className="mt-0.5 mb-2 text-[12.5px] text-text-dim">
+                Your private chat with the bot. Message it once (e.g. /start), then find the id with{' '}
+                <span className="font-semibold text-text">@userinfobot</span>.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  id="tg-chat-id"
+                  value={chatId}
+                  onChange={(e) => setChatId(e.target.value)}
+                  placeholder="123456789"
+                  inputMode="numeric"
+                  className={field}
+                />
+                <button
+                  onClick={() => save.mutate({ chatId: chatId.trim() || null })}
+                  disabled={save.isPending}
+                  className="shrink-0 rounded-control bg-accent px-4 text-[13.5px] font-semibold text-accent-ink transition hover:bg-accent-strong disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+
+            <div className="border-t border-border">
+              <SwitchRow
+                label="Include full message body"
+                description="Appends the plain-text body to each notification (capped at 4096 chars)."
+                checked={!!s.fullBody}
+                disabled={!canSend}
+                onChange={(v) => save.mutate({ fullBody: v })}
+              />
+            </div>
+
+            <div className="border-t border-border py-4">
+              <button
+                onClick={() => test.mutate()}
+                disabled={test.isPending || !canSend}
+                className="flex items-center gap-2 rounded-control border border-border bg-surface-2 px-4 py-2 text-[13.5px] font-semibold text-text transition hover:bg-surface-3 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                <Send size={14} /> {test.isPending ? 'Sending…' : 'Send test message'}
+              </button>
+              <p className="mt-1.5 text-[11.5px] text-text-faint">
+                {canSend ? 'Delivers to the chat id above.' : 'Needs a bot token and a chat id.'}
+              </p>
+            </div>
+
+            {notice && (
+              <div
+                className={clsx(
+                  'rounded-control border px-3.5 py-2.5 text-[13px]',
+                  notice.kind === 'ok'
+                    ? 'border-border bg-surface-2 text-text-dim'
+                    : 'border-danger/40 bg-danger/10 text-danger'
+                )}
+              >
+                {notice.text}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+

@@ -3,6 +3,7 @@ import { ulid } from 'ulid';
 import { Env } from './types';
 import { makeSnippet, ALIAS_LOCAL_PART_RE } from '@mailriz/shared';
 import { stripActiveContent } from './lib/sanitize';
+import { shouldNotify, buildTelegramMessage, sendTelegramMessage, TelegramSettingsRow } from './lib/telegram';
 
 /**
  * Inbound email handler — called by Cloudflare Email Routing.
@@ -97,6 +98,7 @@ interface AliasRow {
   local_part: string;
   domain: string;
   is_enabled: number;
+  telegram_muted?: number;
 }
 
 /** How many addresses the catch-all may materialise in a rolling day. */
@@ -104,7 +106,7 @@ const AUTO_ALIAS_DAILY_LIMIT = 50;
 
 function findAlias(env: Env, localPart: string, domain: string): Promise<AliasRow | null> {
   return env.DB.prepare(
-    'SELECT id, local_part, domain, is_enabled FROM aliases WHERE local_part = ?1 AND domain = ?2'
+    'SELECT id, local_part, domain, is_enabled, telegram_muted FROM aliases WHERE local_part = ?1 AND domain = ?2'
   ).bind(localPart, domain).first<AliasRow>();
 }
 
@@ -143,7 +145,7 @@ async function createAutoAlias(env: Env, localPart: string, domain: string): Pro
       `INSERT INTO aliases (id, user_id, local_part, domain, label, note, is_auto)
        VALUES (?1, ?2, ?3, ?4, '', '', 1)`
     ).bind(id, env.ADMIN_EMAIL || '', localPart, domain).run();
-    return { id, local_part: localPart, domain, is_enabled: 1 };
+    return { id, local_part: localPart, domain, is_enabled: 1, telegram_muted: 0 };
   } catch {
     // Two messages to the same new address can race on UNIQUE(local_part,
     // domain); whichever lost simply reads the winner's row.
@@ -151,7 +153,44 @@ async function createAutoAlias(env: Env, localPart: string, domain: string): Pro
   }
 }
 
-export async function emailHandler(message: EmailMessageLike, env: Env): Promise<void> {
+/**
+ * Best-effort Telegram push for a newly stored message. Runs inside
+ * ctx.waitUntil so a slow or failing notification never delays mail delivery.
+ */
+async function notifyTelegram(
+  env: Env,
+  alias: AliasRow,
+  mail: { id: string; fromName: string; fromAddress: string; subject: string; bodyText: string; snippet: string }
+): Promise<void> {
+  try {
+    const settings = await env.DB.prepare(
+      'SELECT telegram_enabled, telegram_chat_id, telegram_full_body FROM settings WHERE user_id = ?1'
+    )
+      .bind(env.ADMIN_EMAIL || '')
+      .first<TelegramSettingsRow>();
+
+    if (!shouldNotify(settings, alias)) return;
+
+    const text = buildTelegramMessage({
+      fromName: mail.fromName,
+      fromAddress: mail.fromAddress,
+      localPart: alias.local_part,
+      domain: alias.domain,
+      subject: mail.subject,
+      snippet: mail.snippet,
+      bodyText: mail.bodyText,
+      fullBody: !!settings!.telegram_full_body,
+      dashboardHostname: env.DASHBOARD_HOSTNAME || '',
+      emailId: mail.id,
+    });
+
+    await sendTelegramMessage(env, settings!.telegram_chat_id!, text);
+  } catch (err) {
+    console.error(`[telegram] notify failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+export async function emailHandler(message: EmailMessageLike, env: Env, ctx?: { waitUntil(p: Promise<void>): void }): Promise<void> {
   // 1. Parse recipient.
   let toAddr = message.to || '';
   let toLocal = '';
@@ -280,6 +319,21 @@ export async function emailHandler(message: EmailMessageLike, env: Env): Promise
       await env.DB.prepare(
         'INSERT INTO attachments (id, email_id, filename, content_type, size_bytes, r2_key, content_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)'
       ).bind(a.id, id, a.filename, a.contentType, a.size, a.r2Key, a.contentId).run();
+    }
+
+    // 7. Telegram push, best-effort and off the critical path.
+    const notify = notifyTelegram(env, alias, {
+      id,
+      fromName,
+      fromAddress,
+      subject,
+      bodyText,
+      snippet,
+    });
+    if (ctx?.waitUntil) {
+      ctx.waitUntil(notify);
+    } else {
+      await notify;
     }
   } catch (err) {
     console.error('email handler error', err);

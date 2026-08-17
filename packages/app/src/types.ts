@@ -20,6 +20,11 @@ export interface Env {
    */
   SESSION_PASSWORD_HASH?: string;
   SESSION_SIGNING_KEY?: string;
+  /**
+   * Telegram bot token, a Worker **secret** deployed by the CLI. Absent
+   * means Telegram notifications are off no matter what the settings say.
+   */
+  TELEGRAM_BOT_TOKEN?: string;
   /** Workers Rate Limiting binding guarding POST /api/login. */
   LOGIN_LIMITER?: { limit: (opts: { key: string }) => Promise<{ success: boolean }> };
   DASHBOARD_HOSTNAME?: string;

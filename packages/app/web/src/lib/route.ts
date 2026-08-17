@@ -21,8 +21,11 @@ function isView(value: string | undefined): value is EmailView {
   return !!value && (VIEW_IDS as readonly string[]).includes(value);
 }
 
+/** A mailbox screen (the union EmailView) or the settings screen. */
+export type Screen = EmailView | 'settings';
+
 export interface Route {
-  view: EmailView;
+  view: Screen;
   aliasId: string | null;
   labelId: string | null;
   emailId: string | null;
@@ -45,6 +48,11 @@ export function parseRoute(pathname: string, search = ''): Route {
   const segments = pathname.split('/').filter(Boolean).map(decodeURIComponent);
   const q = new URLSearchParams(search).get('q') || '';
 
+  // The settings screen owns the whole app — nothing mailbox-shaped to show.
+  if (segments[0] === 'settings' && segments.length === 1) {
+    return { ...DEFAULT_ROUTE, view: 'settings', q };
+  }
+
   let aliasId: string | null = null;
   let labelId: string | null = null;
   let rest = segments;
@@ -66,12 +74,14 @@ export function parseRoute(pathname: string, search = ''): Route {
     return { ...DEFAULT_ROUTE, q };
   }
 
-  return { view, aliasId, labelId, emailId, q };
+  return { ...DEFAULT_ROUTE, view, aliasId, labelId, emailId, q };
 }
 
 /** Render a route back to a path. Inverse of parseRoute. */
 export function buildPath(route: Route): string {
   const enc = encodeURIComponent;
+
+  if (route.view === 'settings') return '/settings';
 
   const scope = route.aliasId
     ? `/alias/${enc(route.aliasId)}`

@@ -4,6 +4,7 @@ import { attachmentRoutes } from './routes/attachments';
 import { emailRoutes } from './routes/emails';
 import { labelRoutes } from './routes/labels';
 import { meRoutes } from './routes/me';
+import { settingsRoutes } from './routes/settings';
 import { updatesRoutes } from './routes/updates';
 import { authRoutes } from './routes/auth';
 import { jwtAuth } from './middleware/auth';
@@ -20,6 +21,7 @@ app.route('/api', authRoutes);
 app.use('/api/*', jwtAuth);
 
 app.route('/api/me', meRoutes);
+app.route('/api/settings', settingsRoutes);
 app.route('/api/aliases', aliasRoutes);
 app.route('/api/emails', emailRoutes);
 app.route('/api/labels', labelRoutes);

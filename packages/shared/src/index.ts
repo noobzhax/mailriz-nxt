@@ -24,6 +24,8 @@ export interface Alias {
   is_enabled: number; // 0 | 1
   /** 1 when the catch-all created this on first delivery. */
   is_auto?: number;
+  /** 1 when Telegram notifications are muted for this alias. */
+  telegram_muted?: number;
   created_at: number;
   email_count: number;
   last_received_at: number | null;
@@ -40,6 +42,22 @@ export interface UpdateAliasInput {
   label?: string;
   note?: string;
   is_enabled?: 0 | 1;
+  telegram_muted?: 0 | 1;
+}
+
+/** Telegram notification settings as the dashboard sees them. */
+export interface TelegramSettings {
+  enabled: boolean;
+  chatId: string | null;
+  fullBody: boolean;
+  /** Whether a bot token secret is deployed — never the token itself. */
+  hasToken: boolean;
+}
+
+export interface UpdateTelegramSettingsInput {
+  enabled?: boolean;
+  chatId?: string | null;
+  fullBody?: boolean;
 }
 
 export type EmailView = 'inbox' | 'starred' | 'archived' | 'trash';

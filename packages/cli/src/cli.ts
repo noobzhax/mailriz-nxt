@@ -87,6 +87,13 @@ interface Config {
    * the file is written 0600.
    */
   api_token?: string;
+  /**
+   * Telegram bot token, when the operator provided one. Pushed to the Worker
+   * as the TELEGRAM_BOT_TOKEN secret so `update` and `reconfigure` can
+   * redeploy without asking again. The file is written 0600, like the API
+   * token above.
+   */
+  telegram_bot_token?: string;
   installed_at: string;
 }
 
@@ -274,6 +281,63 @@ async function putSessionSecrets(opts: {
       SESSION_SIGNING_KEY: opts.signingKey,
     }),
   });
+}
+
+/**
+ * Push the Telegram bot token to the deployed Worker, through stdin like the
+ * session secrets — a file would leave the token sitting in ~/.mailriz/.temp.
+ *
+ * Runs *after* deploy, for the same reason putSessionSecrets does: secrets
+ * can only be attached to an existing Worker. An empty token is pushed too:
+ * the empty string is the Worker-side "no token" signal, so skipping the
+ * prompt clears a token a previous run deployed.
+ */
+async function putTelegramSecret(opts: {
+  token: string;
+  accountId: string;
+  releaseDir: string;
+  botToken: string | null;
+}) {
+  const env = { ...process.env, CLOUDFLARE_API_TOKEN: opts.token, CLOUDFLARE_ACCOUNT_ID: opts.accountId };
+  await runWrangler(['secret', 'bulk'], {
+    cwd: opts.releaseDir,
+    env,
+    stdin: JSON.stringify({
+      TELEGRAM_BOT_TOKEN: opts.botToken || '',
+    }),
+  });
+}
+
+/**
+ * The bot token to deploy: the stored one when it exists, otherwise a
+ * prompt (empty = skip). Must be called outside a task block — nothing
+ * interactive may print while tasks own the screen.
+ */
+async function resolveTelegramToken(cfg: Config): Promise<string | null> {
+  if (cfg.telegram_bot_token) return cfg.telegram_bot_token;
+  blank();
+  hint('Telegram notifications: create a bot with @BotFather and paste its token.');
+  hint('Empty to skip.');
+  return promptTelegramToken('Telegram bot token (empty to skip)');
+}
+
+/**
+ * Telegram bot token prompt. Optional — an empty answer means "no Telegram".
+ * Telegram tokens are <bot id>:<secret>; a typo is caught here rather than
+ * surfacing later as a silent "notifications disabled".
+ */
+async function promptTelegramToken(message: string): Promise<string | null> {
+  const answer = (await password({
+    message,
+    validate: (v) => {
+      const value = (v || '').trim();
+      if (!value) return undefined;
+      return /^\d+:[A-Za-z0-9_-]+$/.test(value) ? undefined : 'Token looks like 123456:ABC… — check BotFather';
+    },
+  })) as string;
+  if (isCancel(answer)) process.exit(0);
+  const value = (answer || '').trim();
+  return value || null;
 }
 
 /**
@@ -562,6 +626,13 @@ async function cmdSetup() {
     authMode = 'session';
   }
 
+  // Optional, so the wizard flows past it with Enter alone. The token is
+  // pushed as a Worker secret after the deploy, alongside the session ones.
+  blank();
+  hint('Telegram notifications: create a bot with @BotFather and paste its token.');
+  hint('Empty to skip — you can add it later with `reconfigure`.');
+  const telegramBotToken = await promptTelegramToken('Telegram bot token (empty to skip)');
+
   // ---- provisioning: one live task block owns the screen from here on.
   // Nothing interactive may print until tasks.stop(); warnings are queued and
   // shown underneath so long text can't tear the redrawn rows.
@@ -731,6 +802,14 @@ async function cmdSetup() {
         signingKey: signingKey!,
       });
     }
+    // Telegram secret too — empty clears, so a skipped prompt leaves no token
+    // deployed even on a re-run over an existing installation.
+    await putTelegramSecret({
+      token: effectiveToken,
+      accountId,
+      releaseDir: release.dir,
+      botToken: telegramBotToken,
+    });
   } catch (e: any) {
     tasks.failTask('worker', e.message);
     abort(
@@ -805,6 +884,7 @@ async function cmdSetup() {
     access_team_domain: teamDomain || undefined,
     access_app_id: accessAppId || undefined,
     email_routing_enabled_by_setup: routingEnabledByUs,
+    telegram_bot_token: telegramBotToken || undefined,
     installed_at: new Date().toISOString(),
   };
   await saveConfig(cfg);
@@ -914,6 +994,7 @@ async function cmdStatus() {
     ['d1', cfg.d1_database_id.slice(0, 8)],
     // Never the value — just whether a credential is sitting in the file.
     ['api token', cfg.api_token ? `saved in ${CONFIG_PATH}` : 'not saved'],
+    ['telegram', cfg.telegram_bot_token ? 'configured' : 'off'],
     ['installed', new Date(cfg.installed_at).toLocaleString()],
   ]);
   blank();
@@ -978,6 +1059,14 @@ async function cmdUpdate() {
     if (isCancel(pw)) process.exit(0);
     newHash = await hashPassword(pw);
     newSigningKey = generateSigningKey();
+  }
+
+  // Telegram: reuse the stored token silently; a freshly typed one is saved
+  // so the next update stays silent. Prompted before the task list starts —
+  // nothing interactive may print while tasks own the screen.
+  const telegramBotToken = await resolveTelegramToken(cfg);
+  if (telegramBotToken && !cfg.telegram_bot_token) {
+    await saveConfig({ ...cfg, telegram_bot_token: telegramBotToken });
   }
 
   blank();
@@ -1046,6 +1135,12 @@ async function cmdUpdate() {
         signingKey: newSigningKey!,
       });
     }
+    await putTelegramSecret({
+      token,
+      accountId: cfg.account_id,
+      releaseDir: release.dir,
+      botToken: telegramBotToken,
+    });
   } catch (e: any) {
     tasks.failTask('worker', e.message);
     abort(`Update failed: ${e.message}`);
@@ -1161,6 +1256,10 @@ async function cmdReconfigure() {
   }
 
   blank();
+  // Telegram: reuse the stored token silently; ask only if there never was
+  // one. The saveConfig below records a freshly typed one.
+  const telegramBotToken = await resolveTelegramToken(cfg);
+
   const tasks = new TaskList([
     { key: 'release', label: 'release' },
     { key: 'migrations', label: 'migrations' },
@@ -1254,6 +1353,12 @@ async function cmdReconfigure() {
         signingKey: signingKey!,
       });
     }
+    await putTelegramSecret({
+      token,
+      accountId: cfg.account_id,
+      releaseDir: release.dir,
+      botToken: telegramBotToken,
+    });
   } catch (e: any) {
     tasks.failTask('worker', e.message);
     abort(`Worker deploy failed: ${e.message}`);
@@ -1303,6 +1408,7 @@ async function cmdReconfigure() {
     access_aud: accessAud || undefined,
     access_team_domain: teamDomain || undefined,
     access_app_id: accessAppId || undefined,
+    telegram_bot_token: telegramBotToken || undefined,
     email_routing_enabled_by_setup: routingEnabledByUs,
   });
 
