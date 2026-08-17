@@ -72,6 +72,7 @@ export default defineConfig({
             { slug: 'getting-started/what-is-mailriz' },
             { slug: 'getting-started/quick-start' },
             { slug: 'getting-started/cloudflare-token' },
+            { slug: 'getting-started/differences' },
           ],
         },
         {
